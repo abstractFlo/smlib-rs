@@ -35,18 +35,18 @@ class SmAxis2Placement;
 class SmVector3d;
 
 
-// Context and concurrency: many SM_API operations use the process-global default
-// SmContext (SmApiGetOrCreateContext()), whose traversal mark counters are unlocked.
-// Some operations use other contexts; this does not make arbitrary SmApi* calls
-// safe to run concurrently in one process. Use one worker process per concurrent
-// job, with a long-lived default context. In the shipped build, caches belong to
-// objects, so context lifetime alone does not preserve them across object
-// replacement. Context-owned SmGlobalCache queues require SM_USE_GLOBAL_CACHE,
-// which is disabled by default. Operations run single-threaded in the shipped
-// build. Lazy initialization is not synchronized: call SmApiCreateContext() once
-// at startup before spawning threads. See .agents/operations/concurrency.md.
+// Context and concurrency (cadler fork): the default SmContext (SmApiGetOrCreateContext())
+// is per thread, and so is every global SMLib writes during an operation
+// (cadler/threads/allowed.txt lists the writable globals left and why they are safe).
+// Threads may run SM_API operations at the same time on objects of their own. An
+// object belongs to the thread whose context built it: another thread may use it
+// only while that thread does not run SM_API calls, and copies of an object two
+// threads share are taken under a lock of that object. A running operation cannot
+// be cancelled. SmApiDeleteContext() frees the context of a thread that ends.
+// Checked by cadler/threads (harness under ThreadSanitizer, writable_globals.py).
 SMAPI_EXPORT void SmApiCreateContext();
 SMAPI_EXPORT SmContext* SmApiGetOrCreateContext();
+SMAPI_EXPORT void SmApiDeleteContext();
 
 SMAPI_EXPORT SmApiStatus SmApiDraw(
     SmBrep* pBrep,                 ///< [in ]: Draw this object                            <br>

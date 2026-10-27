@@ -30,7 +30,9 @@ GENERAL NOTES:
 #include <SmVector3d.h>
 #include <SmApiTypes.h>
 
-SmContext* pGlobalContext = NULL;
+// One default context per thread: SMLib marks topology through counters and locks of its
+// context, so threads that share one race (cadler: docs/kernel-threads-messung.md).
+SM_THREAD_LOCAL SmContext* pGlobalContext = NULL;
 
 
 /*******************************************************************//**
@@ -61,6 +63,19 @@ SmContext* SmApiGetOrCreateContext()
   }
 
   return pGlobalContext;
+}
+
+/*******************************************************************//**
+PURPOSE --- Delete this thread's default context
+
+USAGE NOTES --- Call when a thread that used SM_API ends, after every object
+built in it is deleted. The next SM_API call in the thread creates a new one.
+
+***********************************************************************/
+void SmApiDeleteContext()
+{
+  delete pGlobalContext;
+  pGlobalContext = NULL;
 }
 
 /*******************************************************************//**

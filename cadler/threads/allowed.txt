@@ -1,0 +1,58 @@
+# The writable globals of libSMLib and libSM_API that may stay process-wide when SM_API runs in
+# several threads (writable_globals.py checks the built libraries against this list). Each group
+# says why it is safe. A name may use * and ? (fnmatch). Everything an operation writes is
+# thread_local instead (cadler commit "SMLib in threads").
+
+# NLib constants and tolerances: initialised in NL_Globals.cpp, Gauss tables, never written
+libSMLib.so: NL_CZERO
+libSMLib.so: NL_ZERO
+libSMLib.so: NL_UNIT*
+libSMLib.so: NL_DMAX
+libSMLib.so: NL_CCPLIM
+libSMLib.so: NL_LTOL
+libSMLib.so: NL_LUDT
+libSMLib.so: NL_PTOL
+libSMLib.so: NL_WTOL
+libSMLib.so: NL_ZCTL
+libSMLib.so: NL_ZDTL
+libSMLib.so: NL_WMIN
+libSMLib.so: NL_WMAX
+libSMLib.so: NL_RECURSELIM
+libSMLib.so: NL_PascalTri
+libSMLib.so: N_gauss_pt
+libSMLib.so: N_gauss_wt
+libSMLib.so: SM_gauss_pt
+libSMLib.so: SM_gauss_wt
+libSMLib.so: N_ApproxSrfWithQuadSrf::ch
+libSMLib.so: N_ApproxSrfWithQuadSrf::uh
+libSMLib.so: N_ApproxSrfWithQuadSrf::vh
+libSMLib.so: badmem
+
+# label tables of the AssertValid reports and trimming checks: string constants, only read
+libSMLib.so: sAssert*_list
+libSMLib.so: sTrimmingCheck*_list
+
+# static const empty sets, built once by a thread-safe static initialiser, then only read
+libSMLib.so: SmMapPtrToPtrs<*>::At(*) const::emptyValueSet
+
+# switches and callbacks a program sets once at startup, before its threads run
+libSMLib.so: NLIBCHKBYPASS
+libSMLib.so: SM_bAssertValidStream
+libSMLib.so: b_DoGraphics
+libSMLib.so: b_Output*
+libSMLib.so: c3d_smlib_error_handler
+libSMLib.so: s_pfBrepListClearFun
+libSMLib.so: s_pfBrepListFun
+libSMLib.so: s_pfErrCallbackFunction
+libSMLib.so: s_pfExcapeCallbackFun
+libSMLib.so: s_pfUICallbackFun
+libSMLib.so: Draw*CallBack
+
+# graphics and debug output: only with b_DoGraphics or an output stream a debugger sets up
+libSMLib.so: s_Disp
+libSMLib.so: s_View
+libSMLib.so: s_pContext
+libSMLib.so: s_CounterList
+libSMLib.so: smgfx_ChangeColor(*)::lCount
+libSMLib.so: smgfx_ChangeOutputColor(*)::lCount
+libSMLib.so: SmPolygonSLPOutput::OutputPolygon(*)::lCount

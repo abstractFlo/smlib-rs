@@ -10237,7 +10237,7 @@ NL_FLAG N_RealMatrixInverseSVD( NL_RMATRIX *rma, NL_RMATRIX *rmb, NL_STACKS *SB 
 NL_INTEGER N_GenerateRandomNumber( NL_VOID )
 {
 
-    static unsigned long int next = 7;
+    static thread_local unsigned long int next = 7;
 
     NL_INTEGER rn;
 
