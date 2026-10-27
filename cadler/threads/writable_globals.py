@@ -26,8 +26,9 @@ ALLOWED = Path(__file__).with_name("allowed.txt")
 
 # objdump -t: address, 7 flag characters, section, size, name (the flags can contain spaces)
 SYMBOL_LINE = re.compile(r"^[0-9a-f]+ (.{7}) (\S+)\s+[0-9a-f]+\s+(?:\.hidden\s+)?(.+)$")
-# compiler and runtime objects, not program state (std::__ioinit: <iostream>'s init object, gcc < 13)
-IGNORED = re.compile(r"^(DW\.ref\.|guard variable for |__dso_handle$|_GLOBAL_OFFSET_TABLE_$|__TMC_END__$|completed\.\d+$|std::__ioinit$|typeinfo |vtable |VTT )")
+# compiler and runtime objects, not program state (std::__ioinit: <iostream>'s init object, gcc < 13;
+# __aarch64_have_lse_atomics: libgcc's atomics switch, set once when the library loads)
+IGNORED = re.compile(r"^(DW\.ref\.|guard variable for |__dso_handle$|_GLOBAL_OFFSET_TABLE_$|__TMC_END__$|completed\.\d+$|std::__ioinit$|__aarch64_have_lse_atomics$|typeinfo |vtable |VTT )")
 
 
 def writable_globals(library: Path) -> set[str]:
