@@ -22,9 +22,16 @@ GENERAL NOTES:
 #endif
 
 class SmBrep;
+class SmFace;
 
 SMAPI_EXPORT SmApiStatus SmApiHealBrep( 
     SmBrep*  pBrep                         ///< [in/out]: Pointer to brep                                             <br>
+);
+
+SMAPI_EXPORT SmApiStatus SmApiSqueezeFace(
+    SmBrep*  pBrep,                        ///< [in/out]: Pointer to brep                                             <br>
+    SmFace*  pFace,                        ///< [in]: Face of pBrep to squeeze away                                   <br>
+    double   dTol3d                        ///< [in]: Largest gap between its vertices to glue together              <br>
 );
 
 #endif
