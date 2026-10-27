@@ -3601,7 +3601,8 @@ int iDebugLevel = DebugLevel();
 
       // Take a small forward step.
       // (Use a static value, as a debugging aid.)
-static double sdStaticStep =   (rTsectPnt.m_ePointType == SM_IP_TANGENT_POINT)
+// per thread (cadler fork): set by the first call, as it is per process without threads
+static thread_local double sdStaticStep =   (rTsectPnt.m_ePointType == SM_IP_TANGENT_POINT)
                      ? 1.0e-3
                      : 1.0e-5;  // (1e-8 is too small: noise)
       double dStep = sdStaticStep;

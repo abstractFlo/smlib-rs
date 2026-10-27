@@ -28,7 +28,7 @@
 /* Set to TRUE if object code license            */
 /* NL_PUBLIC NL_BOOLEAN NL_TEST_LICENSE = FALSE; */
 
-NL_PUBLIC NL_ENODE NL_ERROR; /* { 0, " " };              */
+NL_PUBLIC thread_local NL_ENODE NL_ERROR; /* per thread (cadler fork): set by failing routines */ /* { 0, " " };              */
 
 /* Some specific points and vectors */
 NL_PUBLIC NL_CPOINT NL_CZERO;         /* { 0.0, 0.0, 0.0, 0.0 }            */
@@ -42,7 +42,7 @@ NL_PUBLIC NL_RECTANGLE NL_UNITSQUARE; /* { 0.0, 1.0, 0.0, 1.0 }            */
 NL_PUBLIC NL_MINMAXBOX NL_UNITBOX;    /* { 0.0, 1.0, 0.0, 1.0, 0.0, 1.0 }  */
 
 /* Various tolerances */
-NL_PUBLIC NL_REAL NL_MTOL; /* 1.0e-07   Model space tolerance       */
+NL_PUBLIC thread_local NL_REAL NL_MTOL; /* per thread (cadler fork): N_SrfNurb sets it for a call */ /* 1.0e-07   Model space tolerance       */
 NL_PUBLIC NL_REAL NL_PTOL; /* 1.0e-12   Parameter space tolerance   */
 NL_PUBLIC NL_REAL NL_WTOL; /* 1.0e-03   Weight tolerance            */
 NL_PUBLIC NL_REAL NL_LTOL; /* 1.0e-12   Parallel line tolerance     - gwc: changed to 1.oe-9, will be pushed to 1.0e-4 eventually */
@@ -58,7 +58,7 @@ NL_PUBLIC NL_DEGREE NL_DMAX; /* 17        Maximum degree.   This should   */
 /*                    agree with NL_MAXDEG in nurbsdef.h */
 /*                    if using the fast evaluators    */
 
-NL_PUBLIC NL_INTEGER NL_ITLIM;      /* 50        Maximum number of iterations    */
+NL_PUBLIC thread_local NL_INTEGER NL_ITLIM; /* per thread (cadler fork): fitters lower it for a call */      /* 50        Maximum number of iterations    */
 NL_PUBLIC NL_INTEGER NL_RECURSELIM; /* 20        Maximum levels of recursion     */
 NL_PUBLIC NL_INTEGER NL_CCPLIM;     /* 1000      Max number of curve control pts */
 NL_PUBLIC NL_INTEGER NL_SCPLIM;     /* 10000     Max number of surf control pts  */

@@ -21,7 +21,7 @@
 
 /* Error number and test */
 
-NL_ENODE NL_ERROR =
+thread_local NL_ENODE NL_ERROR =
     {
     0, _T(" ")
     };
@@ -73,7 +73,7 @@ NL_MINMAXBOX NL_UNITBOX =
     };
 
 /* Various tolerances */
-NL_REAL NL_MTOL = 1.0e-07; /* Model space tolerance       */
+thread_local NL_REAL NL_MTOL = 1.0e-07; /* Model space tolerance       */
 NL_REAL NL_PTOL = 1.0e-12; /* Parameter space tolerance   */
 NL_REAL NL_WTOL = 1.0e-03; /* Weight tolerance            */
 NL_REAL NL_LTOL = 1.0e-09; /* Parallel line tolerance - gwc: angle in rad for parallel lines, SMLib uses 1e-4 was 1e-12    */
@@ -92,7 +92,7 @@ NL_DEGREE NL_DMAX = NL_MAXDEG;    /* 17 = Maximum degree.   This should  */
 /* if using the fast evaluators  */
 /* Keep it small (17) since it affects**2 fixed array sizes */
 
-NL_INTEGER NL_ITLIM = 50;      /* Maximum number of iterations    */
+thread_local NL_INTEGER NL_ITLIM = 50;      /* Maximum number of iterations    */
 NL_INTEGER NL_RECURSELIM = 20; /* Maximum number of recursion levels */
 NL_INTEGER NL_CCPLIM = 1000;   /* Max number of curve control pts */
 

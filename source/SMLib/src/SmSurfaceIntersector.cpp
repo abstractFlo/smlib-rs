@@ -7153,7 +7153,7 @@ static ULONG lDebugCount = 0 ;
   SmBoolean bIsSingular = FALSE;
   SmTsectPnt *pLast             = crTsectPoints.GetLast();
   ULONG       lTotalTsectPoints = crTsectPoints.GetSize();
-static       SmBoolean bInsideMe = FALSE;
+static SM_THREAD_LOCAL SmBoolean bInsideMe = FALSE; // recursion guard: per thread (cadler fork)
   if (rp3DCurve && pLast->m_dCurveParameter < 0.0 && !bInsideMe) 
     {
       if ( pFinalTSP != NULL )

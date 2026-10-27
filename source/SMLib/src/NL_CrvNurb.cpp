@@ -5300,7 +5300,7 @@ NL_FLAG N_FitCrvApproxPts
   NL_STACKS *curveStacks )         // i/o: crv's stack
 {
     NL_PRIVATE NL_STRING rname = _T("N_FitCrvApproxPts");
-    static NL_REAL BetaMat[4][4]; /* See "Integrating Arc Length" at end of function */
+    static thread_local NL_REAL BetaMat[4][4]; /* See "Integrating Arc Length" at end of function */
 
     static constexpr NL_INDEX MAXITER = 100;
     NL_FLAG error = NL_NO;
@@ -6305,7 +6305,7 @@ NL_FLAG ST_findStep              // in :
 
 static NL_BOOLEAN ST_doneIterating( NL_INDEX iter, NL_INDEX maxIter, NL_REAL errorSD, NL_REAL errorDist, NL_REAL errorStop )
 {
-    static NL_REAL errors[100]; /* Can't just say 'MAXITER': compiler. */
+    static thread_local NL_REAL errors[100]; /* Can't just say 'MAXITER': compiler. */
 
     /* whether to check converging, or just continue to MAXITER: */
     static NL_FLAG checkIter = NL_NO;

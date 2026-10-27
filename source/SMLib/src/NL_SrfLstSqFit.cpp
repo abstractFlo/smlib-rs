@@ -8852,7 +8852,7 @@ NL_FLAG ST_findStep
 /* --------------------------------------------------------------- */
 static NL_BOOLEAN ST_doneIterating( NL_INDEX iter, NL_INDEX maxIter, NL_REAL errorSD, NL_REAL errorDist, NL_REAL errorStop, NL_REAL surfSize, NL_INDEX nctlU, NL_INDEX nctlV, NL_VECTOR ** ctrlPtMoves )
 {
-    static NL_REAL errors[MAXITER];
+    static thread_local NL_REAL errors[MAXITER];
 
     /* whether to check converging, or just continue to MAXITER: */
     static constexpr NL_FLAG checkIter = NL_YES;

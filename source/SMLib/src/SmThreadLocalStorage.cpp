@@ -329,8 +329,8 @@ SmBoolean SmThreadLocalStorage::GetBeenThroughNew
 // for no SM_USE_WIN_THREADS, SM_USE_PTHREADS - define global callback pointer
 #if !defined(SM_USE_WIN_THREADS) && !defined(SM_USE_PTHREADS)
 static SmErrorCallbackFunctionPtr s_pfErrCallbackFunction;
-static ULONG s_lSERDepth = 0 ;
-static ULONG s_lAssertValidDepth = 0 ;
+static SM_THREAD_LOCAL ULONG s_lSERDepth = 0 ;          // per thread (cadler fork)
+static SM_THREAD_LOCAL ULONG s_lAssertValidDepth = 0 ;  // per thread (cadler fork)
 #endif
 
 /*******************************************************************//**

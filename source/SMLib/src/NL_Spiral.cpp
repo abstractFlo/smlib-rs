@@ -19,13 +19,14 @@ static int ST_GetPointAtAngleD( NL_REAL Theta, NL_POINT *xyz );
 /**********************************************************************/
 
 static constexpr NL_REAL TWOPI = 6.2831853071795864;
-static int RL = 1;
-static NL_INDEX nSpans = 8;
-static NL_REAL dTurns = 1.0;
-static NL_REAL h = 0.5;
-static NL_REAL r0 = 1.0;
-static NL_REAL r1 = 1.0;
-static NL_REAL Rdfun = 0.0; /*((-r0 + r1)/(TWOPI*dTurns)); */
+/* the spiral being built: per thread, set by each call (cadler fork) */
+static thread_local int RL = 1;
+static thread_local NL_INDEX nSpans = 8;
+static thread_local NL_REAL dTurns = 1.0;
+static thread_local NL_REAL h = 0.5;
+static thread_local NL_REAL r0 = 1.0;
+static thread_local NL_REAL r1 = 1.0;
+static thread_local NL_REAL Rdfun = 0.0; /*((-r0 + r1)/(TWOPI*dTurns)); */
 
 /*******************************************************************//**
 

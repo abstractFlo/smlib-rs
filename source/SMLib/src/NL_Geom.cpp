@@ -16,10 +16,10 @@
 NL_REAL ST_havers( NL_REAL );
 NL_REAL ST_mmxaps( NL_REAL );
 
-/* Thread Local Storage for ST_mmxaps */
-NL_REAL *ST_mmxaps_xp;
-NL_REAL *ST_mmxaps_yp;
-NL_INDEX ST_mmxaps_gn;
+/* Thread Local Storage for ST_mmxaps (thread_local: cadler fork) */
+static thread_local NL_REAL *ST_mmxaps_xp;
+static thread_local NL_REAL *ST_mmxaps_yp;
+static thread_local NL_INDEX ST_mmxaps_gn;
 
 /*******************************************************************//**
 
