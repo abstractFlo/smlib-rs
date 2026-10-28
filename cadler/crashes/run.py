@@ -8,6 +8,10 @@ operation, the indices of its edges in brep.edges(), its sizes):
 - fillet-flange, fillet-round-errors: a fillet meeting a corner SMLib has no case for left the
   vertex mapped to its array of edgeuses, which was then taken for a corner (SmFilletExecutive,
   CreateFilletCorners); from cadler's models 63-flange and 100-round-errors with a number changed.
+- unclamped-spline-prism: a prism on a closed periodic B-spline with an unclamped knot vector, as
+  OpenCASCADE writes them to STEP (the native text cadler made of one before it clamped them).
+  Its volume crashed in the Bezier split; SmClampNurbs clamps it on read. The volume must be the
+  profile's area times the height.
 """
 
 import json
@@ -26,6 +30,10 @@ every = body.edges()
 try:
     if case["op"] == "fillet":
         ub.fillet_edges(body, [every[index] for index in case["edges"]], radius=case["radius"])
+    elif case["op"] == "volume":
+        volume = body.volume(1e-6)
+        if abs(volume - case["expect"]) > case["tolerance"]:
+            sys.exit(f"volume {volume}, expected {case['expect']}")
     print("result")
 except RuntimeError as error:
     print("clean error:", str(error).splitlines()[0][:120])
