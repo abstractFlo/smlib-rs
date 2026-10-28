@@ -1,7 +1,8 @@
 // SM_API in several threads of one process: every operation cadler uses runs in 1 to N threads at
 // once, each thread building its own objects, and each result is compared bit for bit with the
-// same sequence run alone in a fresh thread (volume, area, topology, tessellation). Also a body
-// handed from one thread to another once its builder rests. Built twice by run.sh: against the
+// same sequence run alone in a fresh thread (volume, area, topology, tessellation). Then bodies
+// crossing threads: one handed on once its builder rests, one taken as a boolean's tool, and
+// copies taken under a lock while the builder keeps working. Built twice by run.sh: against the
 // release libraries (results and speedup) and from source under ThreadSanitizer (data races).
 //
 //   harness [--threads 1,2,4,8] [--passes 3]
@@ -15,23 +16,34 @@
 #include <SmApiFillets.h>
 #include <SmApiGeneral.h>
 #include <SmApiHeal.h>
+#include <SmApiImportExport.h>
+#include <SmApiIntersectors.h>
 #include <SmApiPolygons.h>
 #include <SmApiPrimitives.h>
 #include <SmApiQueries.h>
 #include <SmBrep.h>
 #include <SmBSplineCurve.h>
+#include <SmAxis2Placement.h>
 #include <SmEdge.h>
+#include <SmEllipse.h>
 #include <SmFace.h>
+#include <SmLine.h>
 #include <SmPoly.h>
+#include <SmSurface.h>
+
+#include <unistd.h>
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -67,8 +79,34 @@ std::uint64_t hashBytes(std::uint64_t hash, const void* data, std::size_t size)
     return hash;
 }
 
+const std::uint64_t emptyHash = 1469598103934665603ull;
+
+std::uint64_t hashPoint(std::uint64_t hash, const SmPoint3d& point)
+{
+    hash = hashBytes(hash, &point.x, sizeof point.x);
+    hash = hashBytes(hash, &point.y, sizeof point.y);
+    return hashBytes(hash, &point.z, sizeof point.z);
+}
+
+// The tessellation of a body into `result` (vertex count and a hash of their points).
+void tessellateInto(Fingerprint& result, SmBrep* body, const SmTessellationParams& params = SmTessellationParams())
+{
+    SmPolyBrep* mesh = NULL;
+    if (SmApiTessellate(body, mesh, params) == SM_SUCCESS && mesh != NULL)
+    {
+        SmTArray<SmPolyVertex*> vertices;
+        mesh->GetPolyVertices(vertices);
+        result.meshVertices = vertices.GetSize();
+        std::uint64_t hash = emptyHash;
+        for (ULONG index = 0; index < vertices.GetSize(); ++index)
+            hash = hashPoint(hash, vertices[index]->GetPoint());
+        result.meshHash = hash;
+        delete mesh;
+    }
+}
+
 // Volume, area, topology and the tessellation of a body; the body is deleted.
-Fingerprint fingerprintOf(SmApiStatus status, SmBrep* body)
+Fingerprint fingerprintOf(SmApiStatus status, SmBrep* body, const SmTessellationParams& params = SmTessellationParams())
 {
     Fingerprint result;
     result.status = static_cast<int>(status);
@@ -85,24 +123,37 @@ Fingerprint fingerprintOf(SmApiStatus status, SmBrep* body)
     result.edges = edges.GetSize();
     SmApiBrepComputeVolume(body, 1.0e-6, result.volume);
     SmApiBrepComputeArea(body, 1.0e-6, result.area);
-    SmPolyBrep* mesh = NULL;
-    if (SmApiTessellate(body, mesh) == SM_SUCCESS && mesh != NULL)
-    {
-        SmTArray<SmPolyVertex*> vertices;
-        mesh->GetPolyVertices(vertices);
-        result.meshVertices = vertices.GetSize();
-        std::uint64_t hash = 1469598103934665603ull;
-        for (ULONG index = 0; index < vertices.GetSize(); ++index)
-        {
-            const SmPoint3d point = vertices[index]->GetPoint();
-            hash = hashBytes(hash, &point.x, sizeof point.x);
-            hash = hashBytes(hash, &point.y, sizeof point.y);
-            hash = hashBytes(hash, &point.z, sizeof point.z);
-        }
-        result.meshHash = hash;
-        delete mesh;
-    }
+    tessellateInto(result, body, params);
     delete body;
+    return result;
+}
+
+// Points an operation found: how many and a hash of them.
+Fingerprint pointsPrint(SmApiStatus status, const SmTArray<SmPoint3d>& points)
+{
+    Fingerprint result;
+    result.status = static_cast<int>(status);
+    result.meshVertices = points.GetSize();
+    result.meshHash = emptyHash;
+    for (ULONG index = 0; index < points.GetSize(); ++index)
+        result.meshHash = hashPoint(result.meshHash, points[index]);
+    return result;
+}
+
+// Curves an operation made: how many and a hash of their ends; the curves are deleted.
+Fingerprint curvesPrint(SmApiStatus status, SmTArray<SmCurve*>& curves)
+{
+    Fingerprint result;
+    result.status = static_cast<int>(status);
+    result.edges = curves.GetSize();
+    result.meshHash = emptyHash;
+    for (ULONG index = 0; index < curves.GetSize(); ++index)
+    {
+        SmPoint3d start, end;
+        curves[index]->GetEnds(start, end);
+        result.meshHash = hashPoint(hashPoint(result.meshHash, start), end);
+        delete curves[index];
+    }
     return result;
 }
 
@@ -135,10 +186,10 @@ SmApiStatus combine(SmApiStatus (*operation)(SmBrep*, SmBrep*, SmBrep*&), SmBrep
     return status;
 }
 
-SmTArray<SmCurve*> rectangle(double x, double y, double length, double width)
+SmTArray<SmCurve*> rectangle(double x, double y, double length, double width, double z = 0.0)
 {
     SmTArray<SmBSplineCurve*> sides;
-    SmApiCreateRectangle(SmPoint3d(x, y, 0.0), length, width, sides);
+    SmApiCreateRectangle(SmPoint3d(x, y, z), length, width, sides);
     SmTArray<SmCurve*> curves;
     for (ULONG index = 0; index < sides.GetSize(); ++index)
         curves.Add(sides[index]);
@@ -157,6 +208,32 @@ SmApiStatus filletAll(SmBrep* body, double radius)
     body->GetEdges(edges);
     return SmApiFilletEdges(body, edges, radius, 1, 1, 1.0);
 }
+
+// A rounded box with a hole through it: what most of cadler's models are made of.
+SmBrep* roundedBoxWithHole()
+{
+    SmBrep* body = box(0, 0, 0, 40, 30, 20);
+    filletAll(body, 3.0);
+    SmBrep* result = NULL;
+    combine(SmApiBooleanDifference, body, cylinder(20, 15, -10, 8, 40), result);
+    return result;
+}
+
+// A native SMLib file of a rounded box with a hole, as cadler's STEP import writes one to read it
+// back (`Brep.read_from_file`); deleted at the end.
+std::string writeImportFile()
+{
+    const std::string path = (std::filesystem::temp_directory_path() / ("sm-threads-" + std::to_string(getpid()) + ".txt")).string();
+    std::thread([&] {
+        SmBrep* body = roundedBoxWithHole();
+        SmApiWriteBrepToFile(body, path.c_str(), TRUE);
+        delete body;
+        SmApiDeleteContext();
+    }).join();
+    return path;
+}
+
+std::string importFile;
 
 struct Operation
 {
@@ -313,6 +390,374 @@ std::vector<Operation> operations()
              print.status = static_cast<int>(status);
              return print;
          }},
+        {"cone", [] {
+             SmBrep* body = NULL;
+             return fingerprintOf(SmApiCreateCone(SmVector3d(0, 0, 0), 10.0, 4.0, 20.0, body), body);
+         }},
+        {"partial cylinder", [] {
+             SmBrep* body = NULL;
+             return fingerprintOf(SmApiCreatePartialCylinder(SmVector3d(0, 0, 0), 10.0, 20.0, 30.0, 250.0, body), body);
+         }},
+        {"partial cone", [] {
+             SmBrep* body = NULL;
+             return fingerprintOf(SmApiCreatePartialCone(SmVector3d(0, 0, 0), 10.0, 4.0, 20.0, 0.0, 270.0, body), body);
+         }},
+        {"partial sphere", [] {
+             SmBrep* body = NULL;
+             return fingerprintOf(SmApiCreatePartialSphere(SmVector3d(0, 0, 0), 10.0, 0.0, 120.0, body), body);
+         }},
+        {"partial torus", [] {
+             SmBrep* body = NULL;
+             return fingerprintOf(SmApiCreatePartialTorus(SmVector3d(0, 0, 0), 15.0, 4.0, 0.0, 200.0, body), body);
+         }},
+        {"cylindrical box", [] {
+             SmBrep* body = NULL;
+             return fingerprintOf(SmApiCreateCylindricalBox(SmVector3d(0, 0, 0), 10.0, 6.0, 12.0, 0.0, 300.0, body), body);
+         }},
+        {"fillet per edge", [] {
+             SmBrep* body = box(0, 0, 0, 40, 30, 20);
+             SmTArray<SmEdge*> edges, chosen;
+             body->GetEdges(edges);
+             SmTArray<double> radii;
+             SmTArray<SmFilletSurfaceGeneratorType> sections;
+             for (ULONG index = 0; index < 4; ++index)
+             {
+                 chosen.Add(edges[index]);
+                 radii.Add(1.0 + 0.5 * index);
+                 sections.Add(SM_FSG_CIRCULAR);
+             }
+             return fingerprintOf(SmApiFilletEdgesPerEdge(body, chosen, radii, sections, 1, 1.0), body);
+         }},
+        {"merge many (merge_breps)", [] {
+             SmTArray<SmBrep*> bodies;
+             bodies.Add(box(0, 0, 0, 60, 20, 2));
+             for (int index = 0; index < 6; ++index)
+                 bodies.Add(cylinder(5.0 + 9.5 * index, 10.0, 1.0, 3.0, 4.0));
+             SmBrep* result = NULL;
+             // the bodies are consumed, also on failure
+             return fingerprintOf(SmApiMergeBreps(bodies, SM_BO_UNION, result), result);
+         }},
+        {"imprint (boolean with options)", [] {
+             SmBrep* body = box(0, 0, 0, 40, 30, 20);
+             SmBrep* tool = cylinder(20, 15, 15, 6, 10);
+             SmBrep* result = NULL;
+             const SmApiStatus status = SmApiBooleanWithOptions(body, tool, SM_BO_UNION, FALSE, TRUE, TRUE, FALSE, FALSE, result);
+             if (status != SM_SUCCESS)
+             {
+                 delete body;
+                 delete tool;
+                 result = NULL;
+             }
+             return fingerprintOf(status, result);
+         }},
+        {"loft (skin)", [] {
+             const double sections[3][3] = {{30, 12, 0}, {20, 20, 10}, {10, 6, 20}};  // length, width, height
+             SmTArray<SmCurve*> curves;
+             SmTArray<const SmCurve*> profiles;
+             SmTArray<ULONG> counts;
+             for (const auto& section : sections)
+             {
+                 SmTArray<SmCurve*> profile = rectangle(0, 0, section[0], section[1], section[2]);
+                 counts.Add(profile.GetSize());
+                 for (ULONG index = 0; index < profile.GetSize(); ++index)
+                 {
+                     curves.Add(profile[index]);
+                     profiles.Add(profile[index]);
+                 }
+             }
+             SmBrep* result = NULL;
+             const SmApiStatus status = SmApiCreateSkinPrimitive(counts, profiles, 2, TRUE, result, NULL, NULL, NULL);
+             deleteCurves(curves);
+             return fingerprintOf(status, result);
+         }},
+        {"sweep along a planar path", [] {
+             SmBSplineCurve* circle = NULL;
+             SmApiCreateCircle(SmPoint3d(0, 0, 0), 1.5, circle);
+             SmApiRotate(circle, SmVector3d(0, 0, 0), SmVector3d(0, 1, 0), 90.0);
+             SmLine* line = NULL;
+             SmApiCreateLineSegment(SmPoint3d(0, 0, 0), SmPoint3d(20, 0, 0), line);
+             SmBSplineCurve* arc = NULL;
+             SmApiCreateArc(SmPoint3d(20, 10, 0), 10.0, -90.0, 0.0, arc);
+             SmTArray<SmCurve*> profile, path;
+             profile.Add(circle);
+             path.Add(line);
+             path.Add(arc);
+             SmBrep* result = NULL;
+             const SmApiStatus status = SmApiCreateSweepAlongPlanarPath(profile, path, TRUE, 3, result);
+             deleteCurves(profile);
+             deleteCurves(path);
+             return fingerprintOf(status, result);
+         }},
+        {"pipe along interpolated points", [] {
+             SmTArray<SmPoint3d> points;
+             points.Add(SmPoint3d(0, 0, 0));
+             points.Add(SmPoint3d(6, 4, 1));
+             points.Add(SmPoint3d(12, 0, 3));
+             points.Add(SmPoint3d(18, 5, 2));
+             points.Add(SmPoint3d(24, 2, 0));
+             SmCurve* path = NULL;
+             SmApiStatus status = SmApiCreateCurveInterpPoints(points, path, SM_CP_CHORDLENGTH);
+             SmBrep* result = NULL;
+             if (status == SM_SUCCESS)
+             {
+                 SmBSplineCurve* spline = dynamic_cast<SmBSplineCurve*>(path);
+                 status = spline ? SmApiCreatePipeSweep(1.0, spline, TRUE, result) : SM_ERR;
+             }
+             delete path;
+             return fingerprintOf(status, result);
+         }},
+        {"offset profile", [] {
+             SmTArray<SmCurve*> outline = rectangle(0, 0, 30, 12);
+             SmBrep* result = NULL;
+             const SmApiStatus status = SmApiCreateOffsetProfile(outline, 2.0, 3, TRUE, FALSE, result);  // 3: both sides
+             deleteCurves(outline);
+             return fingerprintOf(status, result);
+         }},
+        {"turn to NURBS", [] {
+             SmBrep* body = cylinder(0, 0, 0, 10, 20);
+             return fingerprintOf(SmApiTurnToNurbs(body), body);
+         }},
+        {"scale about a point", [] {
+             SmBrep* body = roundedBoxWithHole();
+             const SmApiStatus status = body ? SmApiScaleByPt(body, SmVector3d(5, 5, 0), SmVector3d(1.5, 0.8, 2.0)) : SM_ERR;
+             return fingerprintOf(status, body);
+         }},
+        {"section by a plane", [] {
+             SmBrep* body = roundedBoxWithHole();
+             SmTArray<SmCurve*> curves;
+             const SmApiStatus status = body ? SmApiIntersectBrepWithPlane(body, SmVector3d(0, 0, 7), SmVector3d(0, 0.3, 1), curves) : SM_ERR;
+             delete body;
+             return curvesPrint(status, curves);
+         }},
+        {"line through a body", [] {
+             SmBrep* body = roundedBoxWithHole();
+             SmLine* line = NULL;
+             SmApiCreateLineSegment(SmPoint3d(-5, 15, 10), SmPoint3d(45, 15.5, 10), line);
+             SmTArray<SmCurve*> curves;
+             SmTArray<SmPoint3d> points;
+             const SmApiStatus status = body ? SmApiIntersectCurveBrep(line, body, curves, points) : SM_ERR;
+             deleteCurves(curves);
+             delete line;
+             delete body;
+             return pointsPrint(status, points);
+         }},
+        {"tight box and surface closest points", [] {
+             SmBrep* body = roundedBoxWithHole();
+             SmPoint3d low, high;
+             SmApiStatus status = body ? SmApiBrepBoundingBox(body, TRUE, low, high) : SM_ERR;
+             SmTArray<SmPoint3d> points;
+             points.Add(low);
+             points.Add(high);
+             if (status == SM_SUCCESS)
+             {
+                 SmTArray<SmFace*> faces;
+                 body->GetFaces(faces);
+                 for (ULONG index = 0; index < faces.GetSize() && status == SM_SUCCESS; ++index)
+                 {
+                     SmPoint3d closest;
+                     SmTArray<SmPoint2d> parameters;
+                     double distance = 0.0;
+                     status = SmApiSurfaceClosestPoint(faces[index]->GetSurface(), SmPoint3d(21, 14, 30), closest, parameters, distance);
+                     points.Add(closest);
+                 }
+             }
+             delete body;
+             return pointsPrint(status, points);
+         }},
+        {"edge outlines (tessellate boundaries)", [] {
+             SmBrep* body = roundedBoxWithHole();
+             SmTArray<SmPoint3d> points;
+             SmTArray<ULONG> counts;
+             SmTArray<SmEdge*> edges;
+             const SmApiStatus status = body ? SmApiTessellateBoundaries(body, 4.0, points, counts, edges) : SM_ERR;
+             Fingerprint print = pointsPrint(status, points);
+             print.edges = edges.GetSize();
+             delete body;
+             return print;
+         }},
+        {"tessellate coarse (draft)", [] {
+             SmTessellationParams draft;
+             draft.dChordHeightTol = 0.5;
+             draft.dCurveAngleTolDeg = draft.dSurfaceAngleTolDeg = 20.0;
+             SmBrep* body = roundedBoxWithHole();
+             return fingerprintOf(body ? SM_SUCCESS : SM_ERR, body, draft);
+         }},
+        {"tessellate fine, edge length limit", [] {
+             SmTessellationParams fine;
+             fine.dChordHeightTol = 0.01;
+             fine.dCurveAngleTolDeg = fine.dSurfaceAngleTolDeg = 8.0;
+             fine.dMaxEdgeLength = 2.0;
+             SmBrep* body = roundedBoxWithHole();
+             return fingerprintOf(body ? SM_SUCCESS : SM_ERR, body, fine);
+         }},
+        {"squeeze a sliver face", [] {
+             // four rounds a micrometre short of meeting leave a face 2 um across
+             SmBrep* body = box(0, 0, 0, 40, 40, 40);
+             SmTArray<SmEdge*> edges, top;
+             body->GetEdges(edges);
+             for (ULONG index = 0; index < edges.GetSize(); ++index)
+             {
+                 SmPoint3d low, high;
+                 SmApiEdgeBoundingBox(edges[index], TRUE, low, high);
+                 if (std::fabs(low.z - 40.0) < 1.0e-6 && std::fabs(high.z - 40.0) < 1.0e-6)
+                     top.Add(edges[index]);
+             }
+             SmApiStatus status = SmApiFilletEdges(body, top, 19.999, 1, 1, 1.0);
+             SmFace* sliver = NULL;
+             if (status == SM_SUCCESS)
+             {
+                 SmTArray<SmFace*> faces;
+                 body->GetFaces(faces);
+                 for (ULONG index = 0; index < faces.GetSize(); ++index)
+                 {
+                     SmPoint3d low, high;
+                     SmApiFaceBoundingBox(faces[index], TRUE, low, high);
+                     if (std::hypot(high.x - low.x, high.y - low.y, high.z - low.z) < 3.0e-3)
+                         sliver = faces[index];
+                 }
+                 status = sliver ? SmApiSqueezeFace(body, sliver, 4.0e-3) : SM_ERR;
+             }
+             return fingerprintOf(status, body);
+         }},
+        {"Bezier arch (canonical curve), extruded", [] {
+             // a sketch's Bezier segment as cadler builds it, closed by a line and extruded
+             SmTArray<SmPoint3d> points;
+             points.Add(SmPoint3d(0, 0, 0));
+             points.Add(SmPoint3d(5, 15, 0));
+             points.Add(SmPoint3d(15, 15, 0));
+             points.Add(SmPoint3d(20, 0, 0));
+             SmTArray<double> knots;
+             knots.Add(0.0);
+             knots.Add(1.0);
+             SmTArray<ULONG> multiplicities;
+             multiplicities.Add(4);
+             multiplicities.Add(4);
+             SmBSplineCurve* arch = NULL;
+             SmApiStatus status = SmApiCreateCanonicalCurve(points, knots, multiplicities, NULL, 3, SM_CF_UNSPECIFIED, arch);
+             SmLine* base = NULL;
+             SmApiCreateLineSegment(SmPoint3d(20, 0, 0), SmPoint3d(0, 0, 0), base);
+             SmTArray<SmCurve*> profile;
+             profile.Add(arch);
+             profile.Add(base);
+             SmBrep* result = NULL;
+             if (status == SM_SUCCESS)
+                 status = SmApiCreateLinearSweep(profile, SmVector3d(0, 0, 1), 5.0, TRUE, result);
+             deleteCurves(profile);
+             return fingerprintOf(status, result);
+         }},
+        {"rational arc (weighted canonical curve), extruded", [] {
+             // a quarter circle as cadler's loft alignment builds arcs: degree 2 with weights
+             const double weight = std::cos(M_PI / 4.0);
+             SmTArray<SmPoint3d> points;
+             points.Add(SmPoint3d(10, 0, 0));
+             points.Add(SmPoint3d(10, 10, 0));
+             points.Add(SmPoint3d(0, 10, 0));
+             SmTArray<double> knots, weights;
+             knots.Add(0.0);
+             knots.Add(1.0);
+             weights.Add(1.0);
+             weights.Add(weight);
+             weights.Add(1.0);
+             SmTArray<ULONG> multiplicities;
+             multiplicities.Add(3);
+             multiplicities.Add(3);
+             SmBSplineCurve* arc = NULL;
+             SmApiStatus status = SmApiCreateCanonicalCurve(points, knots, multiplicities, &weights, 2, SM_CF_UNSPECIFIED, arc);
+             SmLine* up = NULL;
+             SmLine* across = NULL;
+             SmApiCreateLineSegment(SmPoint3d(0, 10, 0), SmPoint3d(0, 0, 0), up);
+             SmApiCreateLineSegment(SmPoint3d(0, 0, 0), SmPoint3d(10, 0, 0), across);
+             SmTArray<SmCurve*> profile;
+             profile.Add(arc);
+             profile.Add(up);
+             profile.Add(across);
+             SmBrep* result = NULL;
+             if (status == SM_SUCCESS)
+                 status = SmApiCreateLinearSweep(profile, SmVector3d(0, 0, 1), 5.0, TRUE, result);
+             deleteCurves(profile);
+             return fingerprintOf(status, result);
+         }},
+        {"ellipse placed by a transform, extruded", [] {
+             const double angle = 30.0 * M_PI / 180.0;
+             SmEllipse* ellipse = NULL;
+             SmApiStatus status = SmApiCreateEllipse(SmPoint3d(0, 0, 0), 8.0, 4.0, ellipse);
+             if (status == SM_SUCCESS)
+                 status = SmApiTransform(ellipse, SmAxis2Placement(SmPoint3d(5, 3, 0), SmVector3d(std::cos(angle), std::sin(angle), 0), SmVector3d(-std::sin(angle), std::cos(angle), 0)));
+             SmTArray<SmCurve*> profile;
+             profile.Add(ellipse);
+             SmBrep* result = NULL;
+             if (status == SM_SUCCESS)
+                 status = SmApiCreateLinearSweep(profile, SmVector3d(0, 0, 1), 6.0, TRUE, result);
+             deleteCurves(profile);
+             return fingerprintOf(status, result);
+         }},
+        {"body placed by a transform", [] {
+             // a tilted frame, as cadler places copies and tilted cuts
+             SmBrep* body = roundedBoxWithHole();
+             const SmVector3d across(0.8, 0.6, 0.0);
+             const SmVector3d up(-0.36, 0.48, 0.8);
+             const SmApiStatus status = body ? SmApiTransform(body, SmAxis2Placement(SmPoint3d(10, -4, 7), across, up)) : SM_ERR;
+             return fingerprintOf(status, body);
+         }},
+        {"evaluate a curve", [] {
+             SmTArray<SmPoint3d> points;
+             points.Add(SmPoint3d(0, 0, 0));
+             points.Add(SmPoint3d(6, 4, 1));
+             points.Add(SmPoint3d(12, 0, 3));
+             points.Add(SmPoint3d(18, 5, 2));
+             SmCurve* curve = NULL;
+             SmApiStatus status = SmApiCreateCurveInterpPoints(points, curve, SM_CP_CHORDLENGTH);
+             SmTArray<SmPoint3d> values;
+             if (status == SM_SUCCESS)
+             {
+                 const SmExtent1d range = curve->GetNaturalInterval();
+                 for (int step = 0; step <= 8 && status == SM_SUCCESS; ++step)
+                 {
+                     SmVector3d point, tangent, curvature;
+                     SmVector3d* pointOut = &point;
+                     SmVector3d* tangentOut = &tangent;
+                     SmVector3d* curvatureOut = &curvature;
+                     status = SmApiEvaluateCurve(curve, range.GetMin() + (range.GetMax() - range.GetMin()) * step / 8.0, pointOut, tangentOut, curvatureOut);
+                     values.Add(SmPoint3d(point.x, point.y, point.z));
+                     values.Add(SmPoint3d(tangent.x, tangent.y, tangent.z));
+                     values.Add(SmPoint3d(curvature.x, curvature.y, curvature.z));
+                 }
+             }
+             delete curve;
+             return pointsPrint(status, values);
+         }},
+        {"material census", [] {
+             // a box with a ball-shaped void inside: one solid, one void
+             SmBrep* ball = NULL;
+             SmApiCreateSphere(SmVector3d(20, 15, 10), 5.0, ball);
+             SmBrep* body = NULL;
+             SmApiStatus status = combine(SmApiBooleanDifference, box(0, 0, 0, 40, 30, 20), ball, body);
+             Fingerprint print;
+             if (status == SM_SUCCESS)
+             {
+                 long solids = 0, voids = 0;
+                 status = SmApiBrepMaterialCensus(body, solids, voids);
+                 print.faces = static_cast<unsigned long>(solids);
+                 print.edges = static_cast<unsigned long>(voids);
+             }
+             delete body;
+             print.status = static_cast<int>(status);
+             return print;
+         }},
+        {"import: read, heal, stitch", [] {
+             SmBrep* body = NULL;
+             SmApiStatus status = SmApiReadBrepFromFile(importFile.c_str(), TRUE, TRUE, body);
+             if (status == SM_SUCCESS)
+                 status = SmApiHealBrep(body);
+             if (status == SM_SUCCESS)
+             {
+                 SmBoolean solid = FALSE;
+                 ULONG stitched = 0;
+                 double vertexGap = 0.0, edgeGap = 0.0;
+                 status = SmApiStitchIntoSolid(body, solid, stitched, vertexGap, edgeGap);
+             }
+             return fingerprintOf(status, body);
+         }},
     };
 }
 
@@ -350,6 +795,128 @@ double secondsSince(std::chrono::steady_clock::time_point start)
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 }
 
+// A slot cut across a body; the body is used up.
+Fingerprint cutSlot(SmBrep* body)
+{
+    SmBrep* result = NULL;
+    const SmApiStatus status = combine(SmApiBooleanDifference, body, box(-5, 12, 8, 50, 6, 4), result);
+    return fingerprintOf(status, result);
+}
+
+// What `use` gives on a body `build` made, both in one fresh thread: what a handed body must give.
+Fingerprint alone(const std::function<SmBrep*()>& build, const std::function<Fingerprint(SmBrep*)>& use)
+{
+    Fingerprint result;
+    std::thread([&] {
+        result = use(build());
+        SmApiDeleteContext();
+    }).join();
+    return result;
+}
+
+SmBrep* copyOf(SmBrep* body)
+{
+    SmBrep* copy = NULL;
+    SmApiBrepCopy(body, copy);
+    delete body;
+    return copy;
+}
+
+// Bodies crossing threads, by the rules of .agents/operations/concurrency.md. A thread whose body
+// lives on in another keeps its context (deleting it would leave the body pointing at freed
+// memory). Returns how many results differ.
+int handOffs(const std::vector<Operation>& sequence, const std::vector<Fingerprint>& reference, int passes)
+{
+    int wrong = 0;
+    auto check = [&](const char* what, const Fingerprint& result, const Fingerprint& expected) {
+        if (!(result == expected))
+        {
+            std::printf("  %s: the result differs\n", what);
+            ++wrong;
+        }
+    };
+
+    // a body built in one thread, used and deleted in another once its builder rests
+    SmBrep* handed = NULL;
+    std::thread([&] { handed = roundedBoxWithHole(); }).join();
+    Fingerprint result;
+    std::thread([&] {
+        result = cutSlot(handed);
+        SmApiDeleteContext();
+    }).join();
+    check("a body handed to another thread", result, alone(roundedBoxWithHole, cutSlot));
+
+    // a body from another thread as a boolean's tool (used up by it), its builder resting
+    SmBrep* tool = NULL;
+    std::thread([&] { tool = cylinder(20, 15, -10, 8, 40); }).join();
+    auto drill = [](SmBrep* hole) {
+        SmBrep* body = box(0, 0, 0, 40, 30, 20);
+        filletAll(body, 3.0);
+        SmBrep* drilled = NULL;
+        const SmApiStatus status = combine(SmApiBooleanDifference, body, hole, drilled);
+        return fingerprintOf(status, drilled);
+    };
+    std::thread([&] {
+        result = drill(tool);
+        SmApiDeleteContext();
+    }).join();
+    check("a tool from another thread", result, alone([] { return cylinder(20, 15, -10, 8, 40); }, drill));
+
+    // copies of one body, taken under its lock by several threads while its builder keeps working
+    // in its own context: how a cache shared by threads hands out bodies
+    const int copiers = 4;
+    const int rounds = 4 * passes;
+    const Fingerprint expected = alone([] { return copyOf(roundedBoxWithHole()); }, cutSlot);
+    std::mutex sharedLock;
+    SmBrep* shared = NULL;
+    std::atomic<bool> ready(false), copied(false);
+    int builderWrong = 0;
+    std::thread builder([&] {
+        shared = roundedBoxWithHole();
+        ready = true;
+        for (std::size_t index = 0; !copied || index == 0; ++index)
+            if (!(sequence[index % sequence.size()].run() == reference[index % reference.size()]))
+                ++builderWrong;
+        delete shared;
+        SmApiDeleteContext();
+    });
+    while (!ready)
+        std::this_thread::yield();
+    std::vector<int> copierWrong(copiers, 0);
+    std::vector<std::thread> workers;
+    for (int copier = 0; copier < copiers; ++copier)
+        workers.emplace_back([&, copier] {
+            for (int round = 0; round < rounds; ++round)
+            {
+                SmBrep* copy = NULL;
+                {
+                    std::lock_guard<std::mutex> guard(sharedLock);
+                    SmApiBrepCopy(shared, copy);
+                }
+                if (!(cutSlot(copy) == expected))
+                    ++copierWrong[copier];
+            }
+            SmApiDeleteContext();
+        });
+    for (std::thread& worker : workers)
+        worker.join();
+    copied = true;
+    builder.join();
+    for (int copier = 0; copier < copiers; ++copier)
+        if (copierWrong[copier])
+        {
+            std::printf("  copies under a lock, copier %d: %d of %d results differ\n", copier, copierWrong[copier], rounds);
+            wrong += copierWrong[copier];
+        }
+    if (builderWrong)
+    {
+        std::printf("  copies under a lock: %d results of the builder differ\n", builderWrong);
+        wrong += builderWrong;
+    }
+    std::printf("hand-offs: a body, a tool, %d copies under a lock while the builder works, %d differ\n", copiers * rounds, wrong);
+    return wrong;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -363,6 +930,7 @@ int main(int argc, char** argv)
         else if (std::strcmp(argv[index], "--passes") == 0)
             passes = std::atoi(argv[index + 1]);
     }
+    importFile = writeImportFile();
     const std::vector<Operation> sequence = operations();
     const std::size_t count = sequence.size();
 
@@ -400,33 +968,8 @@ int main(int argc, char** argv)
                     threads, threads * reference.size(), seconds, threads * serialSeconds / seconds, wrong);
     }
 
-    // a body built in one thread, used and deleted in another once its builder rests
-    SmBrep* handed = NULL;
-    std::thread([&] {
-        handed = box(0, 0, 0, 40, 30, 20);
-        filletAll(handed, 3.0);
-    }).join();
-    Fingerprint handedPrint;
-    std::thread([&] {
-        SmBrep* result = NULL;
-        const SmApiStatus status = combine(SmApiBooleanDifference, handed, cylinder(20, 15, -10, 8, 40), result);
-        handedPrint = fingerprintOf(status, result);
-        SmApiDeleteContext();
-    }).join();
-    Fingerprint expected;
-    std::thread([&] {
-        SmBrep* own = box(0, 0, 0, 40, 30, 20);
-        filletAll(own, 3.0);
-        SmBrep* result = NULL;
-        const SmApiStatus status = combine(SmApiBooleanDifference, own, cylinder(20, 15, -10, 8, 40), result);
-        expected = fingerprintOf(status, result);
-        SmApiDeleteContext();
-    }).join();
-    if (!(handedPrint == expected))
-    {
-        std::printf("a body handed to another thread gives a different result\n");
-        ++mismatches;
-    }
+    mismatches += handOffs(sequence, reference, passes);
+    std::filesystem::remove(importFile);
 
     std::printf(mismatches ? "FAILED: %d results differ from the serial run\n" : "ok: every result matches the serial run\n", mismatches);
     return mismatches ? 1 : 0;
