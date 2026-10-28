@@ -7,6 +7,7 @@
 **********************************************************************/
 
 #include "StdAfx.h"
+#include <SmClampNurbs.h>
 
 #include <nurbs.h>
 #include <NL_Spiral.h>      /* Spiral functions */
@@ -6573,6 +6574,9 @@ SmStatus SmBSplineSurface::ReadFromDB
   // output locals  
   SmKnotType            eKnotType           = (SmKnotType) lKnotType ;             
   SmBSplineSurfaceForm  eBSplineSurfaceForm = (SmBSplineSurfaceForm) lBSplineSurfaceForm ;
+
+  // cadler fork: unclamped knot vectors (as STEP has them) clamped, the same surface
+  sm_ClampNurbSurface(sur) ;
 
   // set output - the surface now owns the NURB
   if (pBSplineSurface == NULL)

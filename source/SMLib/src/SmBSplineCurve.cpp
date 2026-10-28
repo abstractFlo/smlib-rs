@@ -7,6 +7,7 @@
 **********************************************************************/
 
 #include "StdAfx.h"
+#include <SmClampNurbs.h>
 
 #include <SmBSplineCurve.h>
 
@@ -7449,6 +7450,9 @@ SmStatus SmBSplineCurve::ReadFromDB
                              }
       SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
     }    
+
+  // cadler fork: an unclamped knot vector (as STEP has them) clamped, the same curve
+  sm_ClampNurbCurve(cur) ;
 
   // Set output - the curve now owns the NURB
   if (pBSplineCurve == NULL)

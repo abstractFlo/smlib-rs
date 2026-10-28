@@ -1901,7 +1901,19 @@ SmBoolean bDebugMe = FALSE;
               sm_GraphicsLoop();
           }
 #endif // SM_DEBUG_CODE
-          continue;
+          // cadler fork: this vertex and the ones after it still map to their arrays of edgeuses,
+          // which later lookups (GetFilletCornerOfVertex) would take for corners and crash on (an
+          // imported assembly with every edge rounded): fail the fillet instead, freeing them
+          for (ULONG kk=ii; kk<lNumFVs; kk++)
+            {
+              delete (SmTArray<SmEdgeuse*>*)m_vVertexCornerMap.At(m_vFilletedVertices[kk]);
+              m_vVertexCornerMap.Remove(m_vFilletedVertices[kk]);
+            }
+          if ( pOptFilletErrorInfo != NULL )
+            {
+              *pOptFilletErrorInfo = *( GetFilletErrorInfo() );
+            }
+          SER( SM_ERR );
         } // end no corner check
 
       // add FilletCorner Object to m_vFilletCorners
