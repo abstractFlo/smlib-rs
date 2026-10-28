@@ -31,8 +31,6 @@
 #include <SmPoly.h>
 #include <SmSurface.h>
 
-#include <unistd.h>
-
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -219,14 +217,23 @@ SmBrep* roundedBoxWithHole()
     return result;
 }
 
+const double pi = 3.14159265358979323846;
+
+// SM_API's file names are TCHAR: wide where SMLib is built with _UNICODE (Windows)
+std::basic_string<TCHAR> nativePath(const std::string& path)
+{
+    return std::basic_string<TCHAR>(path.begin(), path.end());
+}
+
 // A native SMLib file of a rounded box with a hole, as cadler's STEP import writes one to read it
 // back (`Brep.read_from_file`); deleted at the end.
 std::string writeImportFile()
 {
-    const std::string path = (std::filesystem::temp_directory_path() / ("sm-threads-" + std::to_string(getpid()) + ".txt")).string();
+    // named by the clock, as no process id call is on every platform
+    const std::string path = (std::filesystem::temp_directory_path() / ("sm-threads-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".txt")).string();
     std::thread([&] {
         SmBrep* body = roundedBoxWithHole();
-        SmApiWriteBrepToFile(body, path.c_str(), TRUE);
+        SmApiWriteBrepToFile(body, nativePath(path).c_str(), TRUE);
         delete body;
         SmApiDeleteContext();
     }).join();
@@ -647,7 +654,7 @@ std::vector<Operation> operations()
          }},
         {"rational arc (weighted canonical curve), extruded", [] {
              // a quarter circle as cadler's loft alignment builds arcs: degree 2 with weights
-             const double weight = std::cos(M_PI / 4.0);
+             const double weight = std::cos(pi / 4.0);
              SmTArray<SmPoint3d> points;
              points.Add(SmPoint3d(10, 0, 0));
              points.Add(SmPoint3d(10, 10, 0));
@@ -678,7 +685,7 @@ std::vector<Operation> operations()
              return fingerprintOf(status, result);
          }},
         {"ellipse placed by a transform, extruded", [] {
-             const double angle = 30.0 * M_PI / 180.0;
+             const double angle = 30.0 * pi / 180.0;
              SmEllipse* ellipse = NULL;
              SmApiStatus status = SmApiCreateEllipse(SmPoint3d(0, 0, 0), 8.0, 4.0, ellipse);
              if (status == SM_SUCCESS)
@@ -746,7 +753,7 @@ std::vector<Operation> operations()
          }},
         {"import: read, heal, stitch", [] {
              SmBrep* body = NULL;
-             SmApiStatus status = SmApiReadBrepFromFile(importFile.c_str(), TRUE, TRUE, body);
+             SmApiStatus status = SmApiReadBrepFromFile(nativePath(importFile).c_str(), TRUE, TRUE, body);
              if (status == SM_SUCCESS)
                  status = SmApiHealBrep(body);
              if (status == SM_SUCCESS)

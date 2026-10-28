@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SMLib in several threads, checked (Linux):
+# SMLib in several threads, checked (release on Linux and macOS, tsan and globals on Linux):
 #
 #   cadler/threads/run.sh release [threads] [passes]   harness against the built release libraries:
 #                                                      results bit for bit and the speedup
@@ -9,13 +9,20 @@
 #   cadler/threads/run.sh globals                      writable globals of the built libraries
 #                                                      against allowed.txt (writable_globals.py)
 #
-# release and globals need a release build in _build (cadler/build-linux.sh or repo.sh build -r).
+# release and globals need a release build in _build (cadler/build-linux.sh, build-macos.sh or
+# repo.sh build -r). Windows: run-windows.ps1.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$ROOT/cadler/threads"
 OUT="$ROOT/_build/threads"
-LIBS="$ROOT/_build/linux-$(uname -m)/release"
+if [ "$(uname)" = Darwin ]; then
+  LIBS="$ROOT/_build/macos-universal/release"
+  CXX="${CXX:-c++}"
+else
+  LIBS="$ROOT/_build/linux-$(uname -m)/release"
+  CXX="${CXX:-g++}"
+fi
 MODE="${1:-release}"
 THREADS="${2:-1,2,4,8,16}"
 PASSES="${3:-3}"
@@ -28,7 +35,7 @@ mkdir -p "$OUT"
 
 case "$MODE" in
   release)
-    g++ -O2 -g "${FLAGS[@]}" "$HERE/harness.cpp" -o "$OUT/harness" -L"$LIBS" -lSM_API -lSMLib -lpthread -Wl,-rpath,"$LIBS"
+    "$CXX" -O2 -g "${FLAGS[@]}" "$HERE/harness.cpp" -o "$OUT/harness" -L"$LIBS" -lSM_API -lSMLib -lpthread -Wl,-rpath,"$LIBS"
     "$OUT/harness" --threads "$THREADS" --passes "$PASSES"
     ;;
   tsan)
