@@ -1118,6 +1118,9 @@ SmBoolean bDebugMe = FALSE;
               for (ULONG j=0; j<sVertexuses.GetSize(); j++) 
                 {
                   SmVertexuse *pVU = sVertexuses[j];
+                  // cadler fork: an edgeuse left without its vertexuse while a boolean deletes
+                  // faces (name-money-box with small clips) crashed here; fail the traversal
+                  NER(pVU);
                   // for unprocessed vertices attached to the target shell
                   if (!pVU->IsMarked(rMark.GetMarkType()) && pVU->GetShell() == pShellToTraverse) 
                     {
