@@ -881,6 +881,18 @@ SmBoolean bDebugMe=FALSE;
       if(!pEdge->IsTopological(pSurfToKeep, dDistBetween, 10.0, &sMergedFaceDomain)) // note: ApproxTol3d Gain = 10.0 is different than
         { continue ; }                                           //       Gain  1.0 Tol used in SmBrep::RemoveTopologicalEdgesAndVertices()
 
+      // cadler fork: an edge between two loops of one face is kept. DeleteEdge takes two loops
+      // for two faces to merge, and with one face it deleted that face and its surface (a
+      // cube's rounded top rounded again at its seams, 40 mm by 19.96).
+      {
+        SmEdgeuse *pPrimaryEU = pEdge->GetPrimaryEdgeuse();
+        SmEdgeuse *pRadialEU  = pPrimaryEU ? pPrimaryEU->GetRadial() : NULL;
+        if(   pRadialEU
+           && pPrimaryEU->GetLoopuse() != pRadialEU->GetLoopuse()
+           && pPrimaryEU->GetFace()    == pRadialEU->GetFace())
+          { continue ; }
+      }
+
       // code moved to SmEdge::IsTopological()
       //    // skip nonManifold edges - these are not "topological"
       //    if ( !pEdge->IsManifold() )

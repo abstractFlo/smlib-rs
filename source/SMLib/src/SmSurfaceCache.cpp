@@ -1267,6 +1267,23 @@ SmStatus SmBezierAux2d::BuildPolarBox()
     pNodes.Pop(pLastNode);
     pAuxs.Pop(pLastAux);
 
+    // cadler fork: nodes of a Bezier decomposition carry no surface (mBA_pSurface), so there is
+    // nothing to build the box from; it is made unbounded (two opposite vectors), which every
+    // polar box test takes as "any normal" (a ray fired at a cube's rounded top rounded again at
+    // its seams, 100 mm by 49.995, called through the missing surface)
+    SmBoolean bSurfaceMissing = (!bFoundPolar && pLastAux->mBA_pSurface == NULL);
+    for (ULONG ii = 0; ii < pAuxs.GetSize(); ii++)
+    {
+        if (pAuxs[ii]->mBA_pSurface == NULL) { bSurfaceMissing = TRUE; }
+    }
+    if (bSurfaceMissing)
+    {
+        m_sPolarBox.ReSet();
+        m_sPolarBox.AddVector3d(SmVector3d(0.0, 0.0, 1.0));
+        m_sPolarBox.AddVector3d(SmVector3d(0.0, 0.0, -1.0));
+        return SM_SUCCESS;
+    }
+
     // holder for previous polar box
     SmPolarBox  * pLastPolar = NULL;
 

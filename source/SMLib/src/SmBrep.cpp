@@ -27198,9 +27198,14 @@ SmStatus SmBrep::SqueezeEdge
           // Was previously based on ordering in sEdgeuses
           // No, don't skip anything, have to do both, or there will be stale pointers
           // in the Mate Loopuse. [Bug_230221]
+          // cadler fork: both edgeuses of the strut lie in this loopuse, and the first one made it a
+          // vertex loop already. A second vertexuse replaced the first in the loopuse, but the first
+          // stayed on the vertex, and walking it after the loop was deleted crashed (a cube's top
+          // rounded with its corner edges, SmBrep::DeleteFace -> ShellTraversal).
           if(  bStrutStart
               && bStrutEnd
            // && !pEU->IsMarked(eMarkType)  // Don't skip anything.
+              && pEU->GetLoopuse()->m_tLoopuseType != SmVertexuse_TYPE
              )
             {
               // ... convert loop into a vertex loop.

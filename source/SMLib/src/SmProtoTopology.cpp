@@ -5893,6 +5893,23 @@ static int iDebugLevel=0;
 
 } // end SmProtoTopologyManager::UpdateFaces
 
+// cadler fork: a vertex glued away is unmated first, as the squeezing branches do; its mate
+// was left pointing at the deleted vertex, and DoFilleting marked it through that pointer (a
+// cube's rounded top rounded again at its seams, 20 mm by 9.97)
+static void sm_UnmateVertex(SmTopologyIntersector *pTI, SmVertex *pVertex, int iWhichBrep)
+{
+  if(iWhichBrep == 1 )
+    {
+      SmVertex *pMate = SM_CAST_PTR( SmVertex, pTI->GetOtherMate( pVertex));
+      if(pMate != NULL ) { SE( pTI->RemoveRelationship( pVertex, pMate)) ; }
+    }
+  else
+    {
+      SmVertex *pMate = SM_CAST_PTR( SmVertex, pTI->GetThisMate( pVertex));
+      if(pMate != NULL ) { SE( pTI->RemoveRelationship( pMate, pVertex)) ; }
+    }
+}
+
 /*******************************************************************//**
 PURPOSE: After the Breps have been imprinted with the intersections,
    Glue() any coincident vertices left from that operation.
@@ -6036,6 +6053,7 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
           {
               if(pBrep1Vtx1 != pBrep1Vtx2 )
               {
+                  sm_UnmateVertex( m_pTI, pBrep1Vtx2, 1) ;
                   GetWhichBrep(1)->GlueVertices( pBrep1Vtx1, pBrep1Vtx2) ;
                   sDeletedVertices1[jj] = pBrep1Vtx2;
                   pVD2->SetFinalVertex( 1, NULL) ;
@@ -6107,8 +6125,13 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
                   {
                       // Here we have coincident Vertices connected by a long Edge.
                       // We should Glue these.
-                      if(pBrep1Vtx1 != pBrep1Vtx2 )
+                      // cadler fork: unless an earlier common Edge glued or squeezed pBrep1Vtx2
+                      // away already; gluing the deleted Vertex crashed (a cube's rounded top
+                      // rounded again at its seams, 400 mm by 199.94).
+                      if(   pBrep1Vtx1 != pBrep1Vtx2
+                         && sDeletedVertices1[jj] != pBrep1Vtx2 )
                       {
+                          sm_UnmateVertex( m_pTI, pBrep1Vtx2, 1) ;
                           GetWhichBrep(1)->GlueVertices( pBrep1Vtx1, pBrep1Vtx2) ;
                           sDeletedVertices1[jj] = pBrep1Vtx2;
                           pVD2->SetFinalVertex( 1, NULL) ;
@@ -6128,6 +6151,7 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
           {
               if(pBrep2Vtx1 != pBrep2Vtx2 )
               {
+                  sm_UnmateVertex( m_pTI, pBrep2Vtx2, 2) ;
                   GetWhichBrep(2)->GlueVertices( pBrep2Vtx1, pBrep2Vtx2) ;
                   sDeletedVertices2[jj] = pBrep2Vtx2;
                   pVD2->SetFinalVertex( 2, NULL) ;
@@ -6199,8 +6223,13 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
                   {
                       // Here we have coincident Vertices connected by a long Edge.
                       // We should Glue these.
-                      if(pBrep2Vtx1 != pBrep2Vtx2 )
+                      // cadler fork: unless an earlier common Edge glued or squeezed pBrep2Vtx2
+                      // away already; gluing the deleted Vertex crashed (a cube's rounded top
+                      // rounded again at its seams, 400 mm by 199.94).
+                      if(   pBrep2Vtx1 != pBrep2Vtx2
+                         && sDeletedVertices2[jj] != pBrep2Vtx2 )
                       {
+                          sm_UnmateVertex( m_pTI, pBrep2Vtx2, 2) ;
                           GetWhichBrep(2)->GlueVertices( pBrep2Vtx1, pBrep2Vtx2) ;
                           sDeletedVertices2[jj] = pBrep2Vtx2;
                           pVD2->SetFinalVertex( 2, NULL) ;
