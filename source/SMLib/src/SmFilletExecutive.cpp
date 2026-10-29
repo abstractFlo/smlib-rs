@@ -913,8 +913,9 @@ SmStatus SmFilletExecutive::SetFilletParameters
   ULONG                                      lContinuity,     // 1, 2, or 3 for G1, G2, or G3                   
                                                               // Used only when rXSectTypes[ii] == SM_FSG_BLEND_CURVE
                                                               // default:[1]                                    
-  double                                     dThumbweight)    // Used only when eXSectType == SM_FSG_BLEND_CURVE
+  double                                     dThumbweight,    // Used only when eXSectType == SM_FSG_BLEND_CURVE
                                                               // default:[1.0]
+  SmTArray< double >                       * pOptSecondRadii) // per edge, the second face's radius (see the header)
 {
   m_bIsInitialized = FALSE;
 
@@ -1021,9 +1022,17 @@ SmStatus SmFilletExecutive::SetFilletParameters
         {
           case SM_FS_CONST_RADIUS:
             {
+              // cadler fork: the second face offset by a radius of its own (a two-distance chamfer)
+              double dSecondRadius = dRadius;
+              double *pdSecondRadius = NULL;
+              if ( pOptSecondRadii != NULL && ii < pOptSecondRadii->GetSize() )
+                {
+                  dSecondRadius  = (*pOptSecondRadii)[ii];
+                  pdSecondRadius = &dSecondRadius;
+                }
               pFS = new(*pContext) SmConstantRadiusFS( *pContext,
                   dApproxTol, dAngTolRad, dTanTolRad,
-                  dRadius, pEU );
+                  dRadius, pEU, pdSecondRadius );
               break;
             }
           case SM_FS_CONST_DIST:

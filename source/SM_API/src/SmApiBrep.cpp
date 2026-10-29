@@ -2142,6 +2142,95 @@ SmApiStatus SmApiFilletEdgesPerEdge
 } // SmApiFilletEdgesPerEdge
 
 /*******************************************************************//**
+PURPOSE --- Chamfer edges setting each of an edge's two faces back by a distance of its own
+
+NOTES ---   cadler fork. A fillet of linear section whose two faces are offset by radii of
+            their own (SmConstantRadiusFS's second radius): the chamfer face is the ruled
+            surface between the lines where it meets the faces. With a the angle between the
+            faces' binormals at the edge's middle (the wedge of material the chamfer cuts), a
+            face is set back by s_A = (r_B + r_A cos a) / sin a; inverted here. At 90 degrees each
+            face's radius is the other face's distance. Faces that bend along the edge are set
+            back by the distances at its middle.
+***********************************************************************/
+SmApiStatus SmApiChamferEdgesTwoDistances
+(
+    SmBrep* pBrep,
+    SmTArray<SmEdge*>& rEdges,
+    SmTArray<SmFace*>& rRefFaces,
+    SmTArray<double>& rDistances1,
+    SmTArray<double>& rDistances2
+)
+{
+    if( !pBrep || rEdges.GetSize() < 1 )
+        return SM_ERR_INVALID_INPUT;
+    const ULONG lCount = rEdges.GetSize();
+    if( rRefFaces.GetSize() != lCount || rDistances1.GetSize() != lCount || rDistances2.GetSize() != lCount )
+        return SM_ERR_INVALID_INPUT;
+
+    SmTArray<double> sRadii, sSecondRadii;
+    SmTArray<SmFilletSurfaceGeneratorType> sXSectTypes;
+    SmTArray<SmFilletSolverType> sRadiusTypes;
+    for( ULONG i = 0; i < lCount; i++ )
+    {
+        SmEdge* pEdge = rEdges[i];
+        SmEdgeuse* pEU = pEdge ? pEdge->GetBlendEdgeuse() : NULL;
+        if( !pEU || !pEU->GetRadial() )
+            return SM_ERR_INVALID_INPUT;
+        // the fillet solver offsets pEU's face by the first radius, its radial's by the second
+        SmEdgeuse* pRadialEU = pEU->GetRadial();
+        SmFace* pFaceA = pEU->GetFace();
+        SmFace* pFaceB = pRadialEU->GetFace();
+        if( rRefFaces[i] != pFaceA && rRefFaces[i] != pFaceB )
+            return SM_ERR_INVALID_INPUT;
+        const double dSetbackA = rRefFaces[i] == pFaceA ? rDistances1[i] : rDistances2[i];
+        const double dSetbackB = rRefFaces[i] == pFaceA ? rDistances2[i] : rDistances1[i];
+
+        const double dMiddle = pEdge->GetInterval().Evaluate( 0.5 );
+        SmPoint3d sPoint;
+        SmVector3d sBinormalA, sBinormalB;
+        if( pEU->EvaluateBinormal( dMiddle, FALSE, sPoint, sBinormalA ) != SM_SUCCESS
+            || pRadialEU->EvaluateBinormal( dMiddle, FALSE, sPoint, sBinormalB ) != SM_SUCCESS )
+            return SM_ERR;
+        const double dCos = sBinormalA.Dot( sBinormalB );
+        const double dSin = smos_Sqrt( smos_Max( 0.0, 1.0 - dCos * dCos ) );
+        // faces running on into each other: nothing to chamfer
+        if( dSin < SM_EFF_ZERO_SQRT )
+            return SM_ERR_INVALID_INPUT;
+        const double dRadiusA = ( dSetbackB - dSetbackA * dCos ) / dSin;
+        const double dRadiusB = ( dSetbackA - dSetbackB * dCos ) / dSin;
+        // (a lopsided pair on an acute edge asks for a negative radius)
+        if( !SmFilletExecutive::IsRadiusSupported( dRadiusA, pBrep->GetTolerance() )
+            || !SmFilletExecutive::IsRadiusSupported( dRadiusB, pBrep->GetTolerance() ) )
+            return SM_ERR_INVALID_INPUT;
+        sRadii.Add( dRadiusA );
+        sSecondRadii.Add( dRadiusB );
+        sXSectTypes.Add( SM_FSG_LINEAR );
+        sRadiusTypes.Add( SM_FS_CONST_RADIUS );
+    }
+
+    const SmContext* pContext = SmApiGetOrCreateContext();
+    SmFilletExecutive sFilExec( *pContext, pBrep );
+    sFilExec.SetDoGlobalMerge( TRUE );
+
+    SER( sFilExec.SetFilletParameters( pBrep, rEdges,
+                                       sXSectTypes, sRadiusTypes,
+                                       sRadii, NULL,
+                                       -1.0, -1.0, -1.0, -1.0,
+                                       1, 1.0, &sSecondRadii ) );
+
+    SER( sFilExec.DoFillet() );
+
+    pBrep->StitchAndOrient();
+
+#ifdef SM_ASSERT_VALID
+    SM_ASSERT_VALID( pBrep );
+#endif
+
+    return SM_SUCCESS;
+
+} // SmApiChamferEdgesTwoDistances
+
+/*******************************************************************//**
 PURPOSE --- Variable-radius fillet (linear law from start to end radius)
 
 NOTES ---   Creates SmLinearFilletLaw and uses SetFilletParameters

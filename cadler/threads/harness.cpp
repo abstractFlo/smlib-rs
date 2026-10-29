@@ -435,6 +435,22 @@ std::vector<Operation> operations()
              }
              return fingerprintOf(SmApiFilletEdgesPerEdge(body, chosen, radii, sections, 1, 1.0), body);
          }},
+        {"chamfer, two distances", [] {
+             SmBrep* body = box(0, 0, 0, 40, 30, 20);
+             SmTArray<SmEdge*> edges, chosen;
+             SmTArray<SmFace*> faces, referenceFaces;
+             body->GetEdges(edges);
+             SmTArray<double> first, second;
+             for (ULONG index = 0; index < 4; ++index)
+             {
+                 chosen.Add(edges[index]);
+                 edges[index]->GetFaces(faces);
+                 referenceFaces.Add(faces[0]);
+                 first.Add(1.0 + 0.5 * index);
+                 second.Add(3.0);
+             }
+             return fingerprintOf(SmApiChamferEdgesTwoDistances(body, chosen, referenceFaces, first, second), body);
+         }},
         {"merge many (merge_breps)", [] {
              SmTArray<SmBrep*> bodies;
              bodies.Add(box(0, 0, 0, 60, 20, 2));

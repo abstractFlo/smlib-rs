@@ -304,7 +304,12 @@ public:
     double                                     dXSectTol,         ///< [in] : default (if <= 0): 0.05                              <br>
     ULONG                                      lContinuity=1,     ///< [in] : 1, 2, or 3 for G1, G2, or G3                         <br>
                                                                   ///< [in] : Used only when eXSectType == SM_FSG_BLEND_CURVE      <br>
-    double                                     dThumbweight=1.0   ///< [in] : Used only when eXSectType == SM_FSG_BLEND_CURVE      <br>
+    double                                     dThumbweight=1.0,  ///< [in] : Used only when eXSectType == SM_FSG_BLEND_CURVE      <br>
+    SmTArray< double >                       * pOptSecondRadii=NULL ///< [in] : cadler fork: per edge, the radius of the second  <br>
+                                                                  ///<        face's offset (the radial edgeuse's), for         <br>
+                                                                  ///<        SM_FS_CONST_RADIUS; NULL: both radii the same.    <br>
+                                                                  ///<        Only for SM_FSG_LINEAR sections (a two-distance  <br>
+                                                                  ///<        chamfer): circular ones take rail 0's radius.     <br>
   );  
 
   // Same parameters on each edge, taking edge numbers instead of pointers.

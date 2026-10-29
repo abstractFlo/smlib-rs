@@ -451,6 +451,18 @@ SMAPI_EXPORT SmApiStatus SmApiFilletEdgesPerEdge(
     double dThumbweight                                    ///< [in ]: Thumbweight for blend (default 1.0)                <br>
 );
 
+/// cadler fork: chamfer edges, setting the face `rRefFaces[i]` (one of edge i's two faces) back by
+/// `rDistances1[i]` and the other face by `rDistances2[i]`. SM_ERR_INVALID_INPUT for a face not
+/// on its edge, an edge whose faces run on into each other, or a pair the edge's angle cannot
+/// take (on an acute edge, one much larger than the other).
+SMAPI_EXPORT SmApiStatus SmApiChamferEdgesTwoDistances(
+    SmBrep* pBrep,                                          ///< [in/out]: Brep to chamfer                                 <br>
+    SmTArray<SmEdge*>& rEdges,                              ///< [in ]: Edges to chamfer                                   <br>
+    SmTArray<SmFace*>& rRefFaces,                           ///< [in ]: Per edge, the face set back by rDistances1         <br>
+    SmTArray<double>& rDistances1,                          ///< [in ]: Per edge, the setback on its reference face        <br>
+    SmTArray<double>& rDistances2                           ///< [in ]: Per edge, the setback on its other face            <br>
+);
+
 SMAPI_EXPORT SmApiStatus SmApiVariableRadiusFillet(
     SmBrep* pBrep,                        ///< [in/out]: Brep to fillet                                      <br>
     SmTArray<SmEdge*>& rEdges,            ///< [in ]: Edges to fillet                                        <br>
