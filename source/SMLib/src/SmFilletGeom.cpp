@@ -595,6 +595,192 @@ static int sm_ClassifyFacePoint( const SmPoint3d & rPos, SmFace *pOrigFace, SmFa
 } // end static sm_ClassifyFacePoint
 
 /*******************************************************************//**
+PURPOSE: cadler fork: the normal of each surface at a point of a fillet/fillet
+  intersection, through the intersection's UVTrimCurves.
+
+NOTES: Returns the sine of the angle between the two normals.
+***********************************************************************/
+static SmStatus sm_XsectNormals
+  (const SmBSplineCurve & crUVCurve1,   // in : UVTrimCurve on surf1
+   const SmBSplineCurve & crUVCurve2,   // in : UVTrimCurve on surf2
+   const SmSurface      & crSurf1,      // in : 1st intersecting surface
+   const SmSurface      & crSurf2,      // in : 2nd intersecting surface
+   double                 dParam,       // in : intersection curve parameter
+   SmVector3d           & rNormal1,     // out: unit normal of surf1
+   double               & rdSine)       // out: sine of the angle between the normals
+{
+  SmPoint3d sUV1, sUV2;
+  SER(crUVCurve1.EvaluatePoint(dParam, sUV1));
+  SER(crUVCurve2.EvaluatePoint(dParam, sUV2));
+  SmVector3d sNormal2;
+  SER(crSurf1.EvaluateNormal(SmPoint2d(sUV1.x, sUV1.y), FALSE, FALSE, rNormal1));
+  SER(crSurf2.EvaluateNormal(SmPoint2d(sUV2.x, sUV2.y), FALSE, FALSE, sNormal2));
+  rdSine = (rNormal1 * sNormal2).Length();
+  return SM_SUCCESS;
+
+} // end sm_XsectNormals
+
+/*******************************************************************//**
+PURPOSE: cadler fork: straighten the end of a fillet/fillet intersection
+  curve where the two surfaces touch.
+
+NOTES: Two G2 fillets that meet at a corner vertex on a face both of them run
+  into tangentially (a box's top edges rounded with continuity G2) have the
+  same normal at the vertex, and near it they stay within the intersection
+  tolerance of each other.  The marching intersector wanders there: the last
+  spans bend off the intersection's direction and end in a cluster of
+  coincident control points (an internal pole, BSplineCurve AssertValid #15),
+  and the curve can arrive at the vertex along the edge of a face, which makes
+  a corner of zero angle no tessellation closes.
+
+  A point the intersector finds at a distance d from the vertex is known only
+  to dApproxTol / sin(angle between the normals).  The curve is cut nearest
+  the vertex where that is at most a hundredth of d, and a cubic joins the cut
+  to the vertex: it leaves along the curve's tangent at the cut and arrives
+  along that tangent laid into the surfaces' common tangent plane at the
+  vertex, as the intersection of two surfaces touching there does.  Only a
+  curve whose end is defective (an internal pole, or more than its degree of
+  control points within dApproxTol of its end) is changed, and only when the
+  new curve drops onto both surfaces within dApproxTol; otherwise the curves
+  stay as the intersector made them.
+***********************************************************************/
+static SmStatus sm_StraightenTangentialXsectEnd
+  (const SmContext  & crContext,     // in : context for new object construction
+   const SmPoint3d  & crVertexPnt,   // in : intersection end point (a corner vertex)
+   SmSurface        * pSurf1,        // in : 1st intersecting surface
+   SmSurface        * pSurf2,        // in : 2nd intersecting surface
+   double             dApproxTol,    // in : max allowed distance between xSect Curve and surfaces
+   SmBSplineCurve  *& rp3DCurve,     // i/o: 3d intersection curve
+   SmBSplineCurve  *& rpUVCurve1,    // i/o: associated UVTrimCurve on 1st surface
+   SmBSplineCurve  *& rpUVCurve2)    // i/o: associated UVTrimCurve on 2nd surface
+{
+  if (!rp3DCurve || !rpUVCurve1 || !rpUVCurve2 || rp3DCurve->GetDim() != 3)
+    { return SM_SUCCESS; }
+
+  // which end of the curve is at the vertex
+  SmExtent1d sIvl = rp3DCurve->GetNaturalInterval();
+  SmPoint3d sStartPnt, sEndPnt;
+  SER(rp3DCurve->EvaluatePoint(sIvl.GetMin(), sStartPnt));
+  SER(rp3DCurve->EvaluatePoint(sIvl.GetMax(), sEndPnt));
+  SmBoolean bAtMax = sEndPnt.DistanceBetween(crVertexPnt) <= sStartPnt.DistanceBetween(crVertexPnt);
+  SmPoint3d sCurveEndPnt = bAtMax ? sEndPnt : sStartPnt;
+  if (sCurveEndPnt.DistanceBetween(crVertexPnt) > 100.0 * dApproxTol)
+    { return SM_SUCCESS; }
+
+  // only a defective end is changed: an internal pole, or a cluster of control points at the end
+  SmTArray<SmPoint3d> sCtrlPts;
+  SmTArray<double>    sWeights;
+  SER(rp3DCurve->GetControlPolygon(sCtrlPts, sWeights));
+  ULONG lCtrlCount = sCtrlPts.GetSize();
+  if (lCtrlCount < 2)
+    { return SM_SUCCESS; }
+  const SmPoint3d & crEndCtrlPt = sCtrlPts[bAtMax ? lCtrlCount - 1 : 0];
+  ULONG lClustered = 0;
+  while (lClustered < lCtrlCount
+         && sCtrlPts[bAtMax ? lCtrlCount - 1 - lClustered : lClustered].DistanceBetween(crEndCtrlPt) <= dApproxTol)
+    { lClustered++; }
+  SmBoolean bDefective = lClustered > rp3DCurve->GetDegree()
+                      || rp3DCurve->HasInternalPole(SM_ZONE_TOL_3D / 10.0);  // AssertValid's pole tolerance
+  if (!bDefective)
+    { return SM_SUCCESS; }
+
+  // the surfaces must touch at the vertex
+  SmVector3d sVertexNormal;
+  double dSine = 0.0;
+  SER(sm_XsectNormals(*rpUVCurve1, *rpUVCurve2, *pSurf1, *pSurf2, bAtMax ? sIvl.GetMax() : sIvl.GetMin(), sVertexNormal, dSine));
+  if (dSine > 1.0e-3)
+    { return SM_SUCCESS; }
+
+  // walk back from the vertex to the first point the intersector found reliably
+  double dLength = sIvl.GetMax() - sIvl.GetMin();
+  double dCutParam = 0.0;
+  SmBoolean bFoundCut = FALSE;
+  for (double dBack = 1.0e-3 * dLength; dBack <= 0.5 * dLength; dBack *= 1.25)
+    {
+      double dParam = bAtMax ? sIvl.GetMax() - dBack : sIvl.GetMin() + dBack;
+      SmPoint3d sPnt;
+      SmVector3d sNormal1;
+      SER(rp3DCurve->EvaluatePoint(dParam, sPnt));
+      SER(sm_XsectNormals(*rpUVCurve1, *rpUVCurve2, *pSurf1, *pSurf2, dParam, sNormal1, dSine));
+      double dDist = sPnt.DistanceBetween(crVertexPnt);
+      if (dSine * dDist * 0.01 >= dApproxTol)
+        {
+          dCutParam = dParam;
+          bFoundCut = TRUE;
+          break;
+        }
+    }
+  if (!bFoundCut)
+    { return SM_SUCCESS; }
+
+  // the curve up to the cut, and its direction there towards the vertex
+  SmBSplineCurve *pNewCurve = NULL;
+  SER(rp3DCurve->Copy(crContext, pNewCurve));
+  SmObjDelete sDeleteNew(pNewCurve);
+  SmExtent1d sKeepIvl;
+  if (bAtMax) { sKeepIvl.SetMinMax(sIvl.GetMin(), dCutParam); }
+  else        { sKeepIvl.SetMinMax(dCutParam, sIvl.GetMax()); }
+  SER(pNewCurve->Trim(sKeepIvl));
+  sKeepIvl = pNewCurve->GetNaturalInterval();
+  SmVector3d aCut[2];
+  SER(pNewCurve->Evaluate(bAtMax ? sKeepIvl.GetMax() : sKeepIvl.GetMin(), 1, !bAtMax, aCut));
+  SmPoint3d  sCutPnt(aCut[0].x, aCut[0].y, aCut[0].z);
+  SmVector3d sCutDir = bAtMax ? aCut[1] : -aCut[1];
+  SmVector3d sVertexDir = sCutDir - sVertexNormal * sCutDir.Dot(sVertexNormal);
+  if (sCutDir.Unitize() != SM_SUCCESS || sVertexDir.Unitize() != SM_SUCCESS)
+    { return SM_SUCCESS; }
+
+  // a cubic from the cut to the vertex
+  double dBridge = sCutPnt.DistanceBetween(crVertexPnt);
+  SmTArray<SmPoint3d> sBridgePts;
+  sBridgePts.Add(sCutPnt);
+  sBridgePts.Add(sCutPnt + sCutDir * (dBridge / 3.0));
+  sBridgePts.Add(crVertexPnt - sVertexDir * (dBridge / 3.0));
+  sBridgePts.Add(crVertexPnt);
+  SmTArray<ULONG>  sMults;  sMults.Add(4);  sMults.Add(4);
+  SmTArray<double> sKnots;  sKnots.Add(0.0); sKnots.Add(dBridge);
+  SmBSplineCurve *pBridge = NULL;
+  SER(SmBSplineCurve::CreateCanonical(crContext, 3, 3, sBridgePts, SM_CF_UNSPECIFIED, sMults, sKnots,
+                                      SM_KT_PIECEWISE_BEZIER_KNOTS, NULL, NULL, pBridge));
+  SmObjDelete sDeleteBridge(pBridge);
+  if (pNewCurve->JoinWith(bAtMax ? 1 : 0, pBridge, 0, &dApproxTol) != SM_SUCCESS
+      || pNewCurve->HasInternalPole(SM_ZONE_TOL_3D / 10.0))
+    { return SM_SUCCESS; }
+
+  // the new curve must lie on both surfaces
+  SmBSplineCurve *apNewUVCurves[2] = { NULL, NULL };
+  SmSurface *apSurfs[2] = { pSurf1, pSurf2 };
+  SmExtent1d sNewIvl = pNewCurve->GetNaturalInterval();
+  for (ULONG ii = 0; ii < 2; ii++)
+    {
+      double dMaxDist = 0.0, dDeviation = 0.0;
+      SmTArray<SmBSplineCurve*> sUVCurves;
+      SmStatus eStat = apSurfs[ii]->DropCurve(crContext, apSurfs[ii]->GetNaturalUVDomain(), *pNewCurve, sNewIvl,
+                                               dApproxTol, dMaxDist, dDeviation, sUVCurves, FALSE);
+      SmBoolean bFits = eStat == SM_SUCCESS && sUVCurves.GetSize() == 1 && dMaxDist <= dApproxTol;
+      if (bFits)
+        { apNewUVCurves[ii] = sUVCurves[0]; sUVCurves.RemoveAll(); }
+      for (ULONG jj = 0; jj < sUVCurves.GetSize(); jj++)
+        { delete sUVCurves[jj]; }
+      if (!bFits)
+        {
+          if (apNewUVCurves[0]) { delete apNewUVCurves[0]; }
+          return SM_SUCCESS;
+        }
+    }
+
+  // keep the straightened curves
+  delete rp3DCurve;
+  delete rpUVCurve1;
+  delete rpUVCurve2;
+  rp3DCurve  = pNewCurve;  sDeleteNew.Clear();
+  rpUVCurve1 = apNewUVCurves[0];
+  rpUVCurve2 = apNewUVCurves[1];
+  return SM_SUCCESS;
+
+} // end sm_StraightenTangentialXsectEnd
+
+/*******************************************************************//**
 PURPOSE: Find the intersection curve of two surfaces.
 
 NOTES:
@@ -602,7 +788,7 @@ NOTES:
    solver if the first method failed.  All parameters are needed
    except pEndV which can be NULL when it's not available
 ***********************************************************************/
-SmStatus sm_SrfSrfIntersection
+static SmStatus sm_SrfSrfIntersectionCurves
   (const SmContext & crContext,             // in : context for new object construction
    SmVertex        * pStartV,               // in : 1st point known to be on intersection curve
    SmVertex        * pEndV,                 // in : 2nd point known to be on intersection curve,
@@ -1030,6 +1216,50 @@ static ULONG lDebugCount = 0 ;
 #endif // SM_DEBUG_CODE
 
   // all done
+  return SM_SUCCESS;
+
+} // end sm_SrfSrfIntersectionCurves
+
+/*******************************************************************//**
+PURPOSE: Find the intersection curve of two surfaces.
+
+NOTES: cadler fork: sm_SrfSrfIntersectionCurves() finds it; an end at a given
+  vertex where the surfaces touch is straightened there
+  (sm_StraightenTangentialXsectEnd).
+***********************************************************************/
+SmStatus sm_SrfSrfIntersection
+  (const SmContext & crContext,
+   SmVertex        * pStartV,
+   SmVertex        * pEndV,
+   SmVector3d      * pOptDir,
+   SmVector3d      * pOptEndDir,
+   SmSurface       * pSurf1,
+   SmSurface       * pSurf2,
+   SmApproxTol3d     dApproxTol,
+   double            dAngleTol,
+   SmBSplineCurve *& rp3DCurve,
+   SmBSplineCurve *& rpUVCurve1,
+   SmBSplineCurve *& rpUVCurve2,
+   SmBoolean         bOptSkipTwoPntsIntersection,
+   SmPoint3d       * pOptRefPoint,
+   int               iDebugLevel)
+{
+  SmStatus eStat = sm_SrfSrfIntersectionCurves(crContext, pStartV, pEndV, pOptDir, pOptEndDir, pSurf1, pSurf2,
+                                               dApproxTol, dAngleTol, rp3DCurve, rpUVCurve1, rpUVCurve2,
+                                               bOptSkipTwoPntsIntersection, pOptRefPoint, iDebugLevel);
+  if (eStat != SM_SUCCESS)
+    { return eStat; }
+
+  // an end that cannot be straightened stays as it is
+  SmVertex *apEnds[2] = { pStartV, pEndV };
+  for (ULONG ii = 0; ii < 2; ii++)
+    {
+      if (apEnds[ii])
+        {
+          sm_StraightenTangentialXsectEnd(crContext, apEnds[ii]->GetPoint(), pSurf1, pSurf2, dApproxTol,
+                                          rp3DCurve, rpUVCurve1, rpUVCurve2);
+        }
+    }
   return SM_SUCCESS;
 
 } // end sm_SrfSrfIntersection
