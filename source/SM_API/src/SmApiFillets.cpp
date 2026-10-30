@@ -21,6 +21,7 @@ GENERAL NOTES:
 #include "SmFilletExecutive.h"
 #include "SmFilletStandardSolver.h"
 #include "SmFeatureExecutive.h"
+#include <SmBSplineSurface.h>
 
 #if SM_DEBUG_CODE
 static const SmVector3d s_kBlue(0, 0, 1);
@@ -225,56 +226,58 @@ static void sm_NeighbourFaces(SmFace* pFace, SmTArray<SmFace*>& rNeighbours)
     }
 }
 
-// Remove fillets that meet at rounded corners, one feature per connected group with its corner faces
-// (non-planar faces joining only fillets). Works on a copy; pBrep is replaced only if the result is
-// valid, and restored from a copy if the replacement fails.
-static SmStatus sm_DefeatureFillets(SmBrep* pBrep)
+// The fillets among rFaces and their corner faces: non-planar faces joining only fillets, three or
+// more (a boss side between two is not a corner).
+static void sm_FilletsAndCorners(const SmTArray<SmFace*>& rFaces, SmTArray<SmFace*>& rFeatureFaces)
 {
-    const SmContext& crContext = *pBrep->GetContext();
-    SmBrep* pWork = new (crContext) SmBrep(*pBrep, NULL, NULL);
-    SmObjDelete sCleanWork(pWork);
-
-    SmTArray<SmFace*> sFaces, sFeatureFaces;
-    pWork->GetFaces(sFaces);
-    for (ULONG ii = 0; ii < sFaces.GetSize(); ii++)
+    rFeatureFaces.ReSet();
+    for (ULONG ii = 0; ii < rFaces.GetSize(); ii++)
     {
-        if (sm_IsFilletFace(sFaces[ii]))
-            sFeatureFaces.Add(sFaces[ii]);
+        if (sm_IsFilletFace(rFaces[ii]))
+            rFeatureFaces.Add(rFaces[ii]);
     }
-    for (ULONG ii = 0; ii < sFaces.GetSize(); ii++)
+    for (ULONG ii = 0; ii < rFaces.GetSize(); ii++)
     {
-        if (sFeatureFaces.IsIn(sFaces[ii]) || sFaces[ii]->GetSurface()->IsPlanar(SM_ZONE_TOL_3D))
+        if (rFeatureFaces.IsIn(rFaces[ii]) || rFaces[ii]->GetSurface()->IsPlanar(SM_ZONE_TOL_3D))
             continue;
         SmTArray<SmFace*> sNeighbours;
-        sm_NeighbourFaces(sFaces[ii], sNeighbours);
-        // A corner joins three or more fillets; a boss side between two is not one.
+        sm_NeighbourFaces(rFaces[ii], sNeighbours);
         SmBoolean bCorner = sNeighbours.GetSize() >= 3;
         for (ULONG jj = 0; jj < sNeighbours.GetSize() && bCorner; jj++)
-            bCorner = sFeatureFaces.IsIn(sNeighbours[jj]);
+            bCorner = rFeatureFaces.IsIn(sNeighbours[jj]);
         if (bCorner)
-            sFeatureFaces.Add(sFaces[ii]);
+            rFeatureFaces.Add(rFaces[ii]);
     }
-    if (sFeatureFaces.GetSize() == 0)
-        return SM_ERR;
+}
 
-    // One feature per connected group.
-    SmFeatureExecutive sExecutive(crContext, *pWork);
+static ULONG sm_IndexOf(const SmTArray<SmFace*>& rFaces, SmFace* pFace)
+{
+    ULONG lIndex = 0;
+    rFaces.FindElement(pFace, lIndex);
+    return lIndex;
+}
+
+// Removes rFaces from pWork, one feature per group of them that touch along edges, the faces around
+// each extended over it. pWork is a scratch copy: on failure it may be left half changed.
+static SmStatus sm_DefeatureFaces(SmBrep* pWork, const SmTArray<SmFace*>& rFaces)
+{
+    SmFeatureExecutive sExecutive(*pWork->GetContext(), *pWork);
     SmTArray<SmFeature*> sFeatures;
     SmTArray<SmFace*> sGrouped;
-    for (ULONG ii = 0; ii < sFeatureFaces.GetSize(); ii++)
+    for (ULONG ii = 0; ii < rFaces.GetSize(); ii++)
     {
-        if (sGrouped.IsIn(sFeatureFaces[ii]))
+        if (sGrouped.IsIn(rFaces[ii]))
             continue;
         SmTArray<SmFace*> sGroup;
-        sGroup.Add(sFeatureFaces[ii]);
-        sGrouped.Add(sFeatureFaces[ii]);
+        sGroup.Add(rFaces[ii]);
+        sGrouped.Add(rFaces[ii]);
         for (ULONG jj = 0; jj < sGroup.GetSize(); jj++)
         {
             SmTArray<SmFace*> sNeighbours;
             sm_NeighbourFaces(sGroup[jj], sNeighbours);
             for (ULONG kk = 0; kk < sNeighbours.GetSize(); kk++)
             {
-                if (sFeatureFaces.IsIn(sNeighbours[kk]) && !sGrouped.IsIn(sNeighbours[kk]))
+                if (rFaces.IsIn(sNeighbours[kk]) && !sGrouped.IsIn(sNeighbours[kk]))
                 {
                     sGroup.Add(sNeighbours[kk]);
                     sGrouped.Add(sNeighbours[kk]);
@@ -299,15 +302,21 @@ static SmStatus sm_DefeatureFillets(SmBrep* pBrep)
     }
 
     // Rejoin the faces the extended surfaces split.
-    {
-        SmTemporaryChangeValue<SmBoolean> sEnableEdit(pWork->m_bEditingEnabled, TRUE);
-        SER(pWork->RemoveTopologicalEdgesAndVertices());
-    }
-    if (!pWork->AssertValid(NULL, SM_LEVEL_2) || (pBrep->IsManifoldSolid() && !pWork->IsManifoldSolid()))
-        return SM_ERR;
+    SmTemporaryChangeValue<SmBoolean> sEnableEdit(pWork->m_bEditingEnabled, TRUE);
+    return pWork->RemoveTopologicalEdgesAndVertices();
+}
 
-    // Keep a copy to restore pBrep (best effort) if replacing it fails.
-    SmBrep* pBackup = new (crContext) SmBrep(*pBrep, NULL, NULL);
+// TRUE when pAfter, made from pBefore, is sound: the kernel's own checks pass, and a closed solid
+// stayed one.
+static SmBoolean sm_IsSound(SmBrep* pBefore, SmBrep* pAfter)
+{
+    return pAfter->AssertValid(NULL, SM_LEVEL_2) && (!pBefore->IsManifoldSolid() || pAfter->IsManifoldSolid());
+}
+
+// pBrep becomes pWork; restored from a copy (best effort) if that fails.
+static SmStatus sm_Replace(SmBrep* pBrep, SmBrep* pWork)
+{
+    SmBrep* pBackup = new (*pBrep->GetContext()) SmBrep(*pBrep, NULL, NULL);
     SmObjDelete sCleanBackup(pBackup);
 
     SmTemporaryChangeValue<SmBoolean> sEnableEdit(pBrep->m_bEditingEnabled, TRUE);
@@ -319,54 +328,226 @@ static SmStatus sm_DefeatureFillets(SmBrep* pBrep)
     return eReplaceStat;
 }
 
+// The faces of rFeatureFaces that touch rFaces through a chain of them, rFaces among them.
+static void sm_GroupsOf(const SmTArray<SmFace*>& rFaces, const SmTArray<SmFace*>& rFeatureFaces, SmTArray<SmFace*>& rGroups)
+{
+    rGroups = rFaces;
+    for (ULONG ii = 0; ii < rGroups.GetSize(); ii++)
+    {
+        SmTArray<SmFace*> sNeighbours;
+        sm_NeighbourFaces(rGroups[ii], sNeighbours);
+        for (ULONG jj = 0; jj < sNeighbours.GetSize(); jj++)
+        {
+            if (rFeatureFaces.IsIn(sNeighbours[jj]))
+                rGroups.AddUnique(sNeighbours[jj]);
+        }
+    }
+}
+
+// A copy of pBrep to remove the faces at rIndices (in GetFaces() order) from, rRemove those faces
+// in it. Faces split along an edge though they lie on one surface (as a CAD program may leave
+// them after a union) are joined first: at such an edge a fillet's corner has a fourth edge,
+// which DeleteFilletFace cannot extend. Not when that would join one of rRemove away.
+static SmBrep* sm_WorkCopy(SmBrep* pBrep, const SmTArray<ULONG>& rIndices, SmTArray<SmFace*>& rRemove)
+{
+    for (ULONG lJoin = 1; ; lJoin = 0)
+    {
+        SmBrep* pWork = new (*pBrep->GetContext()) SmBrep(*pBrep, NULL, NULL);
+        SmTArray<SmFace*> sFaces;
+        pWork->GetFaces(sFaces);
+        rRemove.ReSet();
+        for (ULONG ii = 0; ii < rIndices.GetSize(); ii++)
+            rRemove.Add(sFaces[rIndices[ii]]);
+        if (!lJoin)
+            return pWork;
+        SmBoolean bKept = FALSE;
+        {
+            SmTemporaryChangeValue<SmBoolean> sEnableEdit(pWork->m_bEditingEnabled, TRUE);
+            if (pWork->RemoveTopologicalEdgesAndVertices() == SM_SUCCESS)
+            {
+                pWork->GetFaces(sFaces);
+                bKept = TRUE;
+                for (ULONG ii = 0; ii < rRemove.GetSize() && bKept; ii++)
+                    bKept = sFaces.IsIn(rRemove[ii]);
+            }
+        }
+        if (bKept)
+            return pWork;
+        delete pWork;
+    }
+}
+
+// The flat faces beside pFillet on planes three times their size. DeleteFilletFace extends the faces
+// beside a fillet over it, which goes wrong when it has to extend their surfaces too (a patch made
+// just for its face, as a STEP import has them); a body built in the kernel keeps its faces on
+// larger surfaces and never needs it.
+static SmStatus sm_WidenPlanesBeside(SmFace* pFillet)
+{
+    SmTArray<SmFace*> sNeighbours;
+    sm_NeighbourFaces(pFillet, sNeighbours);
+    for (ULONG ii = 0; ii < sNeighbours.GetSize(); ii++)
+    {
+        SmFace* pFace = sNeighbours[ii];
+        SmBSplineSurface* pSrf = SM_CAST_PTR(SmBSplineSurface, pFace->GetSurface());
+        if (pSrf == NULL || !pSrf->IsPlanar(SM_ZONE_TOL_3D))
+            continue;
+        SmExtent2d sDomain = pSrf->GetNaturalUVDomain();
+        sDomain.ExpandRelative(3.0);
+        SER(pSrf->ExpandBoundarySpan(sDomain.GetMin().x, SM_SP_U));
+        SER(pSrf->ExpandBoundarySpan(sDomain.GetMax().x, SM_SP_U));
+        SER(pSrf->ExpandBoundarySpan(sDomain.GetMin().y, SM_SP_V));
+        SER(pSrf->ExpandBoundarySpan(sDomain.GetMax().y, SM_SP_V));
+        SER(pFace->RemoveUVTrimCurves());
+        pFace->SetUVDomain(pSrf->GetNaturalUVDomain());
+        double dGap;
+        SER(pFace->CreateUVTrimCurves(TRUE, NULL, NULL, dGap, dGap, dGap, dGap, dGap, dGap));
+    }
+    return SM_SUCCESS;
+}
+
+// pBrep with the faces at rIndices (in GetFaces() order) removed, as a new Brep (NULL when that
+// fails or the result is not sound). With bOneByOne each face goes on its own: deleted, the faces
+// beside it extended (DeleteFilletFace); else a face that touches no other of them goes on its own,
+// the rest as features (sm_DefeatureFaces), which takes only whole groups: a group may not touch
+// a fillet left in place.
+static SmBrep* sm_WithoutFaces(SmBrep* pBrep, const SmTArray<ULONG>& rIndices, SmBoolean bOneByOne)
+{
+    SmTArray<SmFace*> sRemove, sAlone, sTogether;
+    SmBrep* pWork = sm_WorkCopy(pBrep, rIndices, sRemove);
+    SmObjDelete sCleanWork(pWork);
+    for (ULONG ii = 0; ii < sRemove.GetSize(); ii++)
+    {
+        SmTArray<SmFace*> sNeighbours;
+        sm_NeighbourFaces(sRemove[ii], sNeighbours);
+        SmBoolean bAlone = TRUE;
+        for (ULONG jj = 0; jj < sNeighbours.GetSize() && bAlone; jj++)
+            bAlone = !sRemove.IsIn(sNeighbours[jj]);
+        if (bOneByOne || bAlone)
+            sAlone.Add(sRemove[ii]);
+        else
+            sTogether.Add(sRemove[ii]);
+    }
+    SmStatus eStat = SM_SUCCESS;
+    if (sAlone.GetSize() > 0)
+    {
+        SmTemporaryChangeValue<SmBoolean> sEnableEdit(pWork->m_bEditingEnabled, TRUE);
+        for (ULONG ii = 0; ii < sAlone.GetSize() && eStat == SM_SUCCESS; ii++)
+        {
+            eStat = sm_WidenPlanesBeside(sAlone[ii]);
+            if (eStat == SM_SUCCESS)
+                eStat = pWork->DeleteFilletFace(sAlone[ii]);
+        }
+        if (eStat == SM_SUCCESS)
+            eStat = pWork->StitchAndOrient();
+    }
+    if (eStat == SM_SUCCESS && sTogether.GetSize() > 0)
+        eStat = sm_DefeatureFaces(pWork, sTogether);
+    if (eStat != SM_SUCCESS || !sm_IsSound(pBrep, pWork))
+        return NULL;
+    sCleanWork.Clear();
+    return pWork;
+}
+
+// pBrep with the faces at rIndices removed as features, all of them (sm_DefeatureFaces), as a new
+// Brep; NULL when that fails or the result is not sound.
+static SmBrep* sm_DefeaturedCopy(SmBrep* pBrep, const SmTArray<ULONG>& rIndices)
+{
+    SmTArray<SmFace*> sRemove;
+    SmBrep* pWork = sm_WorkCopy(pBrep, rIndices, sRemove);
+    SmObjDelete sCleanWork(pWork);
+    if (sm_DefeatureFaces(pWork, sRemove) != SM_SUCCESS || !sm_IsSound(pBrep, pWork))
+        return NULL;
+    sCleanWork.Clear();
+    return pWork;
+}
+
 /*******************************************************************//**
 PURPOSE --- Remove the Brep's fillet faces (faces with tangent rail edges).
 
 USAGE NOTES --- Fillets meeting at rounded corners are removed with their
-    corner faces. Returns SM_ERR if a fillet can't be removed; fillets already
-    removed stay removed.
+    corner faces. Works on a copy: pBrep changes only when every fillet is
+    removed and the result is sound; else returns SM_ERR and pBrep is as it was.
 ***********************************************************************/
 SmApiStatus SmApiRemoveFillet
 (
     SmBrep*  pBrep                         ///< [in/out]: Pointer to brep                                             <br>
 )
 {
-
     if( pBrep == NULL )
         return SM_ERR_INVALID_INPUT;
 
-    SmTArray<SmFace*> sFaces;
+    SmTArray<SmFace*> sFaces, sFeatureFaces;
     pBrep->GetFaces( sFaces );
+    sm_FilletsAndCorners( sFaces, sFeatureFaces );
+    if( sFeatureFaces.GetSize() == 0 )
+        return SM_SUCCESS;
 
-    SmTArray<SmFace*> sFilletFaces;
-    for( ULONG ii = 0; ii < sFaces.GetSize(); ii++ )
+    SmTArray<ULONG> sIndices;
+    for( ULONG ii = 0; ii < sFeatureFaces.GetSize(); ii++ )
+        sIndices.Add( sm_IndexOf( sFaces, sFeatureFaces[ii] ) );
+    SmBrep* pWork = sm_WithoutFaces( pBrep, sIndices, FALSE );
+    if( pWork == NULL )
+        pWork = sm_DefeaturedCopy( pBrep, sIndices );
+    if( pWork == NULL )
+        return SM_ERR;
+    SmObjDelete sCleanWork( pWork );
+    return sm_Replace( pBrep, pWork );
+}
+
+/*******************************************************************//**
+PURPOSE --- Remove some of the Brep's fillet faces: the faces around them are
+    extended over them.
+
+USAGE NOTES --- A fillet that cannot go on its own (it ends on other fillets or
+    on a rounded corner) goes with the whole group of fillets and corner faces
+    it belongs to. rRemoved gets the indices (in GetFaces()
+    order of pBrep before) of every face removed, rFaces' and the ones that had
+    to go with them. Works on a copy: pBrep changes only when the result is
+    sound; else returns SM_ERR and pBrep is as it was. A face of rFaces that is
+    neither a fillet nor a corner face between fillets is SM_ERR_INVALID_INPUT.
+***********************************************************************/
+SmApiStatus SmApiRemoveFilletFaces
+(
+    SmBrep*                  pBrep,        ///< [in/out]: Pointer to brep                                             <br>
+    const SmTArray<SmFace*>& rFaces,       ///< [in]: Fillet faces of pBrep to remove                                 <br>
+    SmTArray<ULONG>&         rRemoved      ///< [out]: Indices of the faces removed                                   <br>
+)
+{
+    rRemoved.ReSet();
+    if( pBrep == NULL || rFaces.GetSize() == 0 )
+        return SM_ERR_INVALID_INPUT;
+
+    SmTArray<SmFace*> sFaces, sFeatureFaces;
+    pBrep->GetFaces( sFaces );
+    sm_FilletsAndCorners( sFaces, sFeatureFaces );
+    SmTArray<ULONG> sAsked;
+    for( ULONG ii = 0; ii < rFaces.GetSize(); ii++ )
     {
-        if( sm_IsFilletFace( sFaces[ii] ) )
-            sFilletFaces.Add( sFaces[ii] );
+        if( !sFeatureFaces.IsIn( rFaces[ii] ) )
+            return SM_ERR_INVALID_INPUT;
+        sAsked.AddUnique( sm_IndexOf( sFaces, rFaces[ii] ) );
     }
+    SmTArray<SmFace*> sGroups;
+    sm_GroupsOf( rFaces, sFeatureFaces, sGroups );
+    SmTArray<ULONG> sWithGroups;
+    for( ULONG ii = 0; ii < sGroups.GetSize(); ii++ )
+        sWithGroups.Add( sm_IndexOf( sFaces, sGroups[ii] ) );
 
-    if( sFilletFaces.GetSize() > 0 )
+    // the fillets asked for on their own; else with the groups they belong to, a fillet alone in
+    // its group deleted, the rest as features; else every face of the groups as features
+    const SmTArray<ULONG>* pRemoved = &sAsked;
+    SmBrep* pWork = sm_WithoutFaces( pBrep, sAsked, TRUE );
+    if( pWork == NULL )
     {
-        SmTemporaryChangeValue<SmBoolean> sEnableEdit( pBrep->m_bEditingEnabled, TRUE );
-
-        ULONG nRemoved = 0;
-        for( ULONG ii = 0; ii < sFilletFaces.GetSize(); ii++ )
-        {
-            SmStatus delStat = pBrep->DeleteFilletFace( sFilletFaces[ii] );
-            if( delStat == SM_SUCCESS )
-                nRemoved++;
-        }
-
-        if( nRemoved > 0 )
-        {
-            SmStatus stitchStat = pBrep->StitchAndOrient();
-            if( stitchStat != SM_SUCCESS )
-                return stitchStat;
-        }
-        // Rounded-corner fillets remain: defeature them.
-        if( nRemoved < sFilletFaces.GetSize() )
-            return sm_DefeatureFillets( pBrep );
+        pRemoved = &sWithGroups;
+        pWork = sm_WithoutFaces( pBrep, sWithGroups, FALSE );
     }
-
+    if( pWork == NULL )
+        pWork = sm_DefeaturedCopy( pBrep, sWithGroups );
+    if( pWork == NULL )
+        return SM_ERR;
+    SmObjDelete sCleanWork( pWork );
+    SER( sm_Replace( pBrep, pWork ) );
+    rRemoved = *pRemoved;
     return SM_SUCCESS;
 }

@@ -35,4 +35,10 @@ SMAPI_EXPORT SmApiStatus SmApiRemoveFillet(
     SmBrep*  pBrep                         ///< [in/out]: Pointer to brep                                             <br>
 );
 
+SMAPI_EXPORT SmApiStatus SmApiRemoveFilletFaces(
+    SmBrep*                  pBrep,        ///< [in/out]: Pointer to brep                                             <br>
+    const SmTArray<SmFace*>& rFaces,       ///< [in]: Fillet faces of pBrep to remove                                 <br>
+    SmTArray<ULONG>&         rRemoved      ///< [out]: Indices of the faces removed                                   <br>
+);
+
 #endif

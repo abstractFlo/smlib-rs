@@ -999,6 +999,20 @@ SmStatus SmFaceRemoval::MoveVtxAndEdgeToAdjacentFace( SmVertex *pVtxToMove,
 } // end MoveVtxAndEdgeToAdjacentFace
 
 
+// Extends the surface of pFace to rDomain; fails when it cannot.
+static SmStatus sm_ExpandSurface( SmFace *pFace, const SmExtent2d &rDomain )
+{
+  SmBSplineSurface *pSrf = SM_CAST_PTR( SmBSplineSurface, pFace->GetSurface() );
+  if ( pSrf == NULL )
+    { return SM_SUCCESS; }
+  SER( pSrf->ExpandBoundarySpan( rDomain.GetMin().x, SM_SP_U ) );
+  SER( pSrf->ExpandBoundarySpan( rDomain.GetMax().x, SM_SP_U ) );
+  SER( pSrf->ExpandBoundarySpan( rDomain.GetMin().y, SM_SP_V ) );
+  SER( pSrf->ExpandBoundarySpan( rDomain.GetMax().y, SM_SP_V ) );
+  pSrf->UpdateAnalyticalDomain( rDomain );
+  return SM_SUCCESS;
+}
+
 /*******************************************************************//**
 PURPOSE: Do the topology editing: remove the Fillet Face and patch the hole.
 
@@ -1132,7 +1146,6 @@ SmStatus SmFilletRemoval::DoRemoval()
   // extending them and their surfaces to include any new uv points.
   ULONG i;
   SmFace           * pFace = NULL;
-  SmBSplineSurface * pSrf  = NULL;
   SmExtent2d         sFaceDomain;
   SmStatus           eStat;
 
@@ -1143,16 +1156,7 @@ SmStatus SmFilletRemoval::DoRemoval()
       sFaceDomain = pFace->GetUVDomain();
       sFaceDomain.AddPoint2d( m_aUVEndSurfNew[ i ] );
       pFace->SetUVDomain( sFaceDomain );
-
-      pSrf = SM_CAST_PTR( SmBSplineSurface, pFace->GetSurface() );
-      if ( pSrf != NULL )
-      {
-          eStat = pSrf->ExpandBoundarySpan( sFaceDomain.GetMin().x, SM_SP_U );
-          eStat = pSrf->ExpandBoundarySpan( sFaceDomain.GetMax().x, SM_SP_U );
-          eStat = pSrf->ExpandBoundarySpan( sFaceDomain.GetMin().y, SM_SP_V );
-          eStat = pSrf->ExpandBoundarySpan( sFaceDomain.GetMax().y, SM_SP_V );
-          eStat = pSrf->UpdateAnalyticalDomain( sFaceDomain );
-      }
+      SER( sm_ExpandSurface( pFace, sFaceDomain ) );
 
       // Now do the side (tangent) faces.  These have two new uv points.
       pFace = m_aTanFaces[ i ];
@@ -1162,15 +1166,7 @@ SmStatus SmFilletRemoval::DoRemoval()
       pFace->SetUVDomain( sFaceDomain );
 
       // Now update its surface.
-      pSrf = SM_CAST_PTR( SmBSplineSurface, pFace->GetSurface() );
-      if ( pSrf != NULL )
-      {
-          eStat = pSrf->ExpandBoundarySpan( sFaceDomain.GetMin().x, SM_SP_U );
-          eStat = pSrf->ExpandBoundarySpan( sFaceDomain.GetMax().x, SM_SP_U );
-          eStat = pSrf->ExpandBoundarySpan( sFaceDomain.GetMin().y, SM_SP_V );
-          eStat = pSrf->ExpandBoundarySpan( sFaceDomain.GetMax().y, SM_SP_V );
-          eStat = pSrf->UpdateAnalyticalDomain( sFaceDomain );
-      }
+      SER( sm_ExpandSurface( pFace, sFaceDomain ) );
   } // end loop on two End faces and two Tangent faces.
 
 
@@ -1502,6 +1498,19 @@ SmStatus SmFilletRemoval::DoRemoval()
                               m_aNewEdgeCurveUVs[1],
                               m_dNewEdgeDeviation, 
                               TRUE );     // TRUE = validate geometry here. On the last one its possible
+
+  // The uv curves above were pieced together on the surfaces before they were extended,
+  // whose parameterization the extension may change (see ExpandBoundarySpan): make the
+  // four faces' uv curves again from their edges.
+  SmFace *aNeighbours[4] = { m_aEndFaces[0], m_aEndFaces[1], m_aTanFaces[0], m_aTanFaces[1] };
+  for ( i = 0; i < 4; i++ )
+  {
+      pFace = aNeighbours[ i ];
+      SER( pFace->RemoveUVTrimCurves() );
+      pFace->SetUVDomain( pFace->GetSurface()->GetNaturalUVDomain() );
+      double dGap;
+      SER( pFace->CreateUVTrimCurves( TRUE, NULL, NULL, dGap, dGap, dGap, dGap, dGap, dGap ) );
+  }
 
   // And that should do it.
   return SM_SUCCESS;
