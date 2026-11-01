@@ -138,7 +138,9 @@ public:
   SmSurface                * GetExtendedBaseSurface()   const { return m_pExtendedSurface; }
   virtual SmExtent2d         GetMaxAnalyticDomain()     const { return m_pSurface->GetMaxAnalyticDomain(); }
   virtual ULONG              GetDegree(SmSurfParamType) const { return 3; }
-  ULONG                      GetSingularities()         const { return m_lSingularities ; }
+  // not GetSingularities(): that name hid SmSurface's virtual one (gcc -Woverloaded-virtual); every
+  // caller goes through an SmSurface and gets that one
+  ULONG                      GetCachedSingularities()   const { return m_lSingularities ; }
 
   virtual SmStatus GetKnots
   (

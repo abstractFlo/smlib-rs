@@ -106,6 +106,7 @@ public:
     SmAssembly const       * GetAssembly()  const { return SM_CAST_PTR(SmAssembly,m_pComponent); }
     SmAssembly             * GetAssembly()        { return SM_CAST_PTR(SmAssembly,m_pComponent); }
     SmBrep                 * GetBrep()            { return SM_CAST_PTR(SmBrep,m_pComponent); }
+    using SmSAGObject::GetBrep; // the virtual const one stays visible beside it (gcc -Woverloaded-virtual)
     SmSAGObject const      * GetComponent() const { return SM_CAST_PTR(SmSAGObject,m_pComponent); }
     SmSAGObject            * GetComponent()       { return SM_CAST_PTR(SmSAGObject,m_pComponent); }
     SmAssembly             * GetParentAssembly()  { return (SmAssembly*)m_pListOwner; }
