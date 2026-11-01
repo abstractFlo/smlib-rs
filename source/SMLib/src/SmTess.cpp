@@ -9541,6 +9541,125 @@ SmStatus SmTess::TriangulateSingleFace
 
     } // End Scope - Prepare for Triangulation iteration, build Vertex Spatial tree, assign PolyEdges Index Values
 
+  // cadler: a large polygon on a plane (a plate's face with 600 holes joined into one loop: 15000
+  // corners) is cut ear by ear in the order a walk round it meets them, as earcut does. The corner
+  // search below scans every corner for the best one before each cut, the square of the corners
+  // (0.5 s for that face); on a plane which corner goes first does not show. Each cut is the one the
+  // corner search makes, so the vertex tree and the polygon stay as it keeps them; a round without
+  // an ear leaves the rest to the corner search.
+  if (   lNumEdges >= 1000
+      && pPolyFace->GetOKBackPtrs()
+      && pPolyFace->GetOriginalFace()
+      && pPolyFace->GetOriginalFace()->GetSurface()->IsPlanar() )
+    {
+      const ULONG lCount = lNumEdges;
+      std::vector<SmPolyEdge*>         aEdge(lCount);
+      std::vector<const SmPolyVertex*> aVertex(lCount);
+      std::vector<double>              aX(lCount), aY(lCount);
+      std::vector<ULONG>               aPrev(lCount), aNext(lCount);
+      std::vector<char>                aAlive(lCount, 1);
+      double dMinX = SM_BIG_DOUBLE, dMinY = SM_BIG_DOUBLE, dMaxX = -SM_BIG_DOUBLE, dMaxY = -SM_BIG_DOUBLE;
+      for ( ULONG kk=0; kk<lCount; kk++ )
+        {
+          aEdge[kk]   = sPolyFaceEdges[kk];
+          aVertex[kk] = aEdge[kk]->GetStartPolyVertex();
+          const SmPoint3d sPt = aEdge[kk]->GetStartPolyVertex()->GetPoint();
+          aX[kk] = sPt.x; aY[kk] = sPt.y;
+          aPrev[kk] = (kk + lCount - 1) % lCount; aNext[kk] = (kk + 1) % lCount;
+          dMinX = smos_Min(dMinX, sPt.x); dMinY = smos_Min(dMinY, sPt.y);
+          dMaxX = smos_Max(dMaxX, sPt.x); dMaxY = smos_Max(dMaxY, sPt.y);
+        }
+      const double dSizeX = smos_Max(dMaxX - dMinX, SM_EFF_ZERO), dSizeY = smos_Max(dMaxY - dMinY, SM_EFF_ZERO);
+      // twice the area of a triangle that counts as none, and the slack of a point on a side
+      const double dZeroArea = 1.0e-12 * dSizeX * dSizeY;
+
+      // the corners in a grid of about two per cell: the ones a proposed triangle may hold are near it
+      const ULONG lCells = (ULONG)smos_Max(1.0, std::sqrt((double)lCount / 2.0));
+      std::vector< std::vector<ULONG> > aGrid((size_t)lCells * lCells);
+      auto cellX = [&](double x) { return (ULONG)smos_Min((double)(lCells - 1), smos_Max(0.0, (x - dMinX) / dSizeX * lCells)); };
+      auto cellY = [&](double y) { return (ULONG)smos_Min((double)(lCells - 1), smos_Max(0.0, (y - dMinY) / dSizeY * lCells)); };
+      for ( ULONG kk=0; kk<lCount; kk++ )
+        { aGrid[(size_t)cellY(aY[kk]) * lCells + cellX(aX[kk])].push_back(kk); }
+
+      auto cross = [&](ULONG a, ULONG b, ULONG c) { return (aX[b] - aX[a]) * (aY[c] - aY[a]) - (aY[b] - aY[a]) * (aX[c] - aX[a]); };
+      auto sameCorner = [&](ULONG j, ULONG k) { return aVertex[j] == aVertex[k] || (aX[j] == aX[k] && aY[j] == aY[k]); };
+
+      // an ear: the corner turns left (the polygon runs counterclockwise) and no other corner lies
+      // in its triangle or on its new side
+      auto isEar = [&](ULONG b)
+        {
+          const ULONG a = aPrev[b], c = aNext[b];
+          if ( cross(a, b, c) <= dZeroArea )
+            { return false; }
+          const ULONG x0 = cellX(smos_Min(aX[a], smos_Min(aX[b], aX[c]))), x1 = cellX(smos_Max(aX[a], smos_Max(aX[b], aX[c])));
+          const ULONG y0 = cellY(smos_Min(aY[a], smos_Min(aY[b], aY[c]))), y1 = cellY(smos_Max(aY[a], smos_Max(aY[b], aY[c])));
+          for ( ULONG gy=y0; gy<=y1; gy++ )
+            for ( ULONG gx=x0; gx<=x1; gx++ )
+              for ( ULONG p : aGrid[(size_t)gy * lCells + gx] )
+                {
+                  if ( !aAlive[p] || sameCorner(p, a) || sameCorner(p, b) || sameCorner(p, c) )
+                    { continue; }
+                  if ( cross(a, b, p) >= -dZeroArea && cross(b, c, p) >= -dZeroArea && cross(c, a, p) >= -dZeroArea )
+                    { return false; }
+                }
+          return true;
+        };
+
+      ULONG lLeft = lCount;
+      ULONG lEar  = 0, lStop = 0;
+      while ( lLeft > 3 )
+        {
+          if ( isEar(lEar) )
+            {
+              const ULONG a = aPrev[lEar], c = aNext[lEar];
+              SmPolyEdge   * pNewPolyEdge  = NULL ;
+              SmPolyLoop   * pNewPolyLoop  = NULL ;
+              SmPolyFace   * pNewPolyFace  = NULL ;
+              SmPolyEdge   * pNewSingularEdge   = NULL ;
+              SmPolyVertex * pNewSingularVertex = NULL ;
+              aEdge[lEar]->Mark(rMarkLock.GetMarkType());
+              SER( pPolyFace->MakeManifoldEdge(aEdge[a], aEdge[c], pNewPolyEdge, pNewPolyLoop, pNewPolyFace,
+                                               FALSE, &pNewSingularEdge, &pNewSingularVertex, aEdge[lEar]));
+              SER( sm_AddEdgeToVertexTree( pNewPolyEdge, rpVertexTree ));
+              SER( sm_AddEdgeToVertexTree( pNewPolyEdge->GetRadial(), rpVertexTree ));
+              aEdge[a] = pNewPolyEdge;
+              aAlive[lEar] = 0;
+              aNext[a] = c; aPrev[c] = a;
+              lLeft--;
+              // a plane has no singular edges; should one come, its new edge is subdivided as the
+              // corner search would, and the corner search takes it from here
+              if ( pNewSingularEdge != NULL )
+                {
+                  ULONG lNumSubdivisionsNeeded = 0;
+                  SER( CheckAgainstSurfaceCache( pTessCache, pNewPolyEdge->GetStartPolyVertex()->GetPoint(),
+                                                 pNewPolyEdge->GetEndPolyVertex()->GetPoint(), 1.1, TRUE, lNumSubdivisionsNeeded ));
+                  if ( lNumSubdivisionsNeeded > 0 )
+                    {
+                      rPolyEdgeSubdivisions.Add( smos_Min( lNumSubdivisionsNeeded, (ULONG)20 ));
+                      rPolyEdgesToSubdivide.Add( pNewPolyEdge );
+                    }
+                  break;
+                }
+              lEar = aNext[c]; lStop = lEar;
+              continue;
+            }
+          lEar = aNext[lEar];
+          if ( lEar == lStop )
+            { break; } // a whole round without an ear
+        }
+
+      // the corner search goes on with what is left, as it would after its own cuts
+      pPolyFace->GetPolyEdges(sPolyFaceEdges);
+      lNumEdges = sPolyFaceEdges.GetSize();
+      sScores.SetSize( lNumEdges ) ;          sScores.SetAll( 0 ) ;
+      sNumSubdivisions.SetSize( lNumEdges ) ; sNumSubdivisions.SetAll( 0 ) ;
+      sChordDist.SetSize( lNumEdges ) ;       sChordDist.SetAll( 0.0 ) ;
+#ifdef SM_DEBUG_CODE
+      sHistory.SetSize( lNumEdges ) ;         sHistory.SetAll( 0 ) ;
+      sIterChanged.SetSize( lNumEdges ) ;     sIterChanged.SetAll( 0 ) ;
+#endif // SM_DEBUG_CODE
+    }
+
   // arrive here when:
   //    PolyFace polygon has at least 5 edges or is a nonConvex Quad.
   //    rpVertexTree = SmTree loaded with <pPolyFaceEdge, pPolyFaceEdge->StartPt->pos> pairs
