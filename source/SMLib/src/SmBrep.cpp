@@ -13260,6 +13260,17 @@ SmBoolean bDebugMe=FALSE;
           pFace->GetLoops(sFaceLoops) ;
           // SmLoop  * pFaceOuterLoop = sFaceLoops[0] ;
 
+          // cadler: an inner loop only moves to pNewF when its test point lies inside pNewF's outer
+          // loop (out of pFace's outer loop means in pNewF's, the two split one face). On a plane all
+          // of that lies within the box round the loop's edges (on a curved surface it can bulge out:
+          // a cap above its circle), so a test point outside the box keeps the loop where it is
+          // without the classifications below, which on a face with many holes cost the square of
+          // the holes (600 holes: 2.6 s of 3.2 s).
+          SmExtent3d sNewFOuterBox ;
+          const SmBoolean bNewFOuterBox = bClassifyToFace && !bNewFMissingSeam
+                                          && pFace->GetSurface()->IsPlanar()
+                                          && pNewFOuterLoopuse->CalculateBoundingBox(sNewFOuterBox) == SM_SUCCESS ;
+
           // for every pFace->InnerLoop - move nested inner loops from pFace to pNewF as needed
           for (ULONG i=1; i<sFaceLoops.GetSize();i++)
             {
@@ -13312,6 +13323,9 @@ SmBoolean bDebugMe=FALSE;
                   sm_GraphicsLoop();
                 }
 #endif // SM_DEBUG_CODE
+
+              if( bNewFOuterBox && !sNewFOuterBox.ContainsPoint3d( sTestPoint, 100.0 * dPointTol + GetTolerance() ) )
+                { continue ; }
 
               // classify locals
               SmFace               * pTgtFace   = bClassifyToFace ? pFace : pNewF ;
