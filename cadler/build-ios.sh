@@ -41,13 +41,14 @@ compile() {  # sdk, clang target, objects folder, library, its flags...: every s
   local sdk="$1" target="$2" objects="$3" library="$4"
   shift 4
   mkdir -p "$objects"
-  printf '%s\n' "$ROOT/source/$library/src/"*.cpp | xargs -P "$JOBS" -I{} sh -c '
-    object="$0/$(basename "{}" .cpp).o"
-    sdk="$1" target="$2"
-    shift 2
-    [ "$object" -nt "{}" ] || xcrun --sdk "$sdk" clang++ -target "$target" "$@" -c "{}" -o "$object" \
-      || { echo "failed: {}" >&2; exit 255; }
-  ' "$objects" "$sdk" "$target" "$@"
+  # macOS's xargs keeps a command with -I under 255 bytes: the flags go by the environment, a source
+  # as the one argument (no flag or path here has a space in it)
+  find "$ROOT/source/$library/src" -maxdepth 1 -name '*.cpp' -print0 \
+    | COMPILE_SDK="$sdk" COMPILE_TARGET="$target" COMPILE_OBJECTS="$objects" COMPILE_FLAGS="$*" xargs -0 -n 1 -P "$JOBS" sh -c '
+      object="$COMPILE_OBJECTS/$(basename "$1" .cpp).o"
+      [ "$object" -nt "$1" ] || xcrun --sdk "$COMPILE_SDK" clang++ -target "$COMPILE_TARGET" $COMPILE_FLAGS -c "$1" -o "$object" \
+        || { echo "failed: $1" >&2; exit 255; }
+    ' sh
 }
 
 stage="$BUILD/stage"
