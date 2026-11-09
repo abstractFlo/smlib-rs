@@ -17,6 +17,8 @@
 #include <SmPlane.h>
 #include <SmSphere.h>
 #include <SmCone.h>
+#include <utility>
+#include <vector>
 #include <SmTorus.h>
 #include <SmSurfOfExtrusion.h>
 #include <SmCircle.h>
@@ -5340,6 +5342,8 @@ SmStatus SmPrimitiveCreation::CreateCurveSweep
 // Transform each profile according to input parameters to align with path
 // Then move resulting surface back to original path position
   ULONG lNumComposites = sComposites.GetSize();
+  // cadler: for each side face, where its swept surface starts and ends along the path
+  std::vector< std::pair<double, double> > sSweptAlong;
   for(ii = 0; ii < lNumComposites; ii++)
   {
     SmCompositeCurve *pComp = sComposites[ii];
@@ -5365,9 +5369,20 @@ SmStatus SmPrimitiveCreation::CreateCurveSweep
 
     // For now subdivide at G1 continuities to make things
     // which are more filletable.
+    // cadler: the swept surface's extent along the path, before CreateFacesFromSurface
+    // (which deletes it when it splits it into several faces)
+    const SmExtent2d sSweptDomain = pNewBSS->GetNaturalUVDomain();
+
     SmTArray<SmFace*> sNewFaces;
     pBrep->CreateFacesFromSurface( pNewBSS, pNewBSS->GetNaturalUVDomain(), SM_CT_G1, sNewFaces );
     rSideFaces.Append( sNewFaces );
+    for( ULONG kk = 0; kk < sNewFaces.GetSize(); kk++ )
+    {
+      if( pOptions->bTranslationalSweep )
+        { sSweptAlong.push_back( std::make_pair( sSweptDomain.GetMin().y, sSweptDomain.GetMax().y ) ); }
+      else
+        { sSweptAlong.push_back( std::make_pair( sSweptDomain.GetMin().x, sSweptDomain.GetMax().x ) ); }
+    }
 
   } // end for each curve in sComposites
 
@@ -5417,72 +5432,33 @@ SmStatus SmPrimitiveCreation::CreateCurveSweep
     SmStatus eCapStat = SM_SUCCESS;
 
     SmExtent2d sDomain;
-    SmSurfParamType eSurfParam = SM_SP_U;
-    double dParam;
 
+    // cadler: CreateFacesFromSurface splits a swept surface into several faces where it is not
+    // smooth enough, around the profile as well (a circle's quarters). The caps are made from
+    // every side face that reaches the start or the end of the path, not from the first and
+    // last lNumCurves faces, which held only a quarter of a circle then: an open loop, and the
+    // whole sweep failed.
     ULONG lNumSideFaces = rSideFaces.GetSize();
+    const SmSurfParamType eAlong = pOptions->bTranslationalSweep ? SM_SP_V : SM_SP_U;
     for(ii = 0; ii < lNumSideFaces; ii++)
     {
-      if(ii < lNumCurves)
+      pSurface = rSideFaces[ii]->GetSurface();
+      sDomain = pSurface->GetNaturalUVDomain();
+      const double dFaceStart = pOptions->bTranslationalSweep ? sDomain.GetMin().y : sDomain.GetMin().x;
+      const double dFaceEnd   = pOptions->bTranslationalSweep ? sDomain.GetMax().y : sDomain.GetMax().x;
+      const double dSweptStart = ii < sSweptAlong.size() ? sSweptAlong[ii].first  : dFaceStart;
+      const double dSweptEnd   = ii < sSweptAlong.size() ? sSweptAlong[ii].second : dFaceEnd;
+      const double dSame = SM_EFF_ZERO_SQRT * ( 1.0 + fabs( dSweptEnd - dSweptStart ) );
+      if( fabs( dFaceStart - dSweptStart ) <= dSame )
       {
-        pSurface = rSideFaces[ii]->GetSurface();
-        sDomain = pSurface->GetNaturalUVDomain();
-        eSurfParam = SM_SP_U;
-        dParam = sDomain.GetMin().x;
-
-        if(pOptions->bTranslationalSweep)
-        {
-          eSurfParam = SM_SP_V;
-          dParam = sDomain.GetMin().y;
-        }
-
-        eCapStat = pSurface->CreateIsoParametricCurve( *pContext, eSurfParam, dParam, bAppoxTol3d / 10.0, pCrv );
+        eCapStat = pSurface->CreateIsoParametricCurve( *pContext, eAlong, dFaceStart, bAppoxTol3d / 10.0, pCrv );
         SER( eCapStat );
-
-#ifdef SM_DEBUG_CODE
-        if(bDebugMe)
-        {
-          smgfx_Erase();
-          smgfx_SetLook( 1, 2, 0, 0, 1 );
-          pSurface->DrawUV(); sm_GraphicsLoop();
-
-          smgfx_SetLook( 2, 3, 1, 0, 0 );
-          pCrv->Draw(); sm_GraphicsLoop();
-          sm_GraphicsLoop();
-        }
-#endif // SM_DEBUG_CODE 
         sStartCurves.Add( pCrv );
       }
-
-      // Always get sEndCurves when lNumSideFaces < lNumCurves. In this case lNumSideFaces - lNumCurves 
-      // should be a negative number and all is well. But they are ULONGs. So the result is not negative
-      // So we end up with no sEndCurves.
-      if(lNumCurves > lNumSideFaces || ii >= lNumSideFaces - lNumCurves)
+      if( fabs( dFaceEnd - dSweptEnd ) <= dSame )
       {
-        pSurface = rSideFaces[ii]->GetSurface();
-        sDomain = pSurface->GetNaturalUVDomain();
-        dParam = sDomain.GetMax().x;
-        if(pOptions->bTranslationalSweep)
-        {
-          eSurfParam = SM_SP_V;
-          dParam = sDomain.GetMax().y;
-        }
-
-        eCapStat = pSurface->CreateIsoParametricCurve( *pContext, eSurfParam, dParam,  bAppoxTol3d / 10.0, pCrv );
+        eCapStat = pSurface->CreateIsoParametricCurve( *pContext, eAlong, dFaceEnd, bAppoxTol3d / 10.0, pCrv );
         SER( eCapStat );
-
-#ifdef SM_DEBUG_CODE
-        if(bDebugMe)
-        {
-          smgfx_Erase();
-          smgfx_SetLook( 1, 2, 0, 0, 1 );
-          pSurface->DrawUV(); sm_GraphicsLoop();
-
-          smgfx_SetLook( 2, 3, 1, 0, 0 );
-          pCrv->Draw(); sm_GraphicsLoop();
-          sm_GraphicsLoop();
-        }
-#endif // SM_DEBUG_CODE 
         sEndCurves.Add( pCrv );
       }
     } // end for each side face
