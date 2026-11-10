@@ -33,8 +33,10 @@ A longer one: `cargo run --release --example drilled_box`.
 
 ```toml
 [dependencies]
-smlib = { git = "https://github.com/abstractFlo/smlib-rs" }
+smlib = { git = "https://github.com/abstractFlo/smlib-rs", tag = "v0.1.0" }
 ```
+
+Releases and what changed in each: [CHANGELOG.md](CHANGELOG.md), [Releases](https://github.com/abstractFlo/smlib-rs/releases).
 
 Building needs a C++17 compiler; the kernel compiles in about a minute. Targets built in CI:
 Linux (x86_64, aarch64), macOS, Windows (MSVC), iOS and `wasm32-unknown-emscripten`.

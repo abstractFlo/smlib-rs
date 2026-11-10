@@ -1,0 +1,27 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag, versions and changelog fit
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME" > notes.md
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --release
+      - run: cargo package -p smlib-sys
+      - name: GitHub release with the changelog's notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "smlib-rs ${GITHUB_REF_NAME#v}" --notes-file notes.md --verify-tag
