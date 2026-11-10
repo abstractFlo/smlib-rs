@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Added in smlib-rs, not part of an NVIDIA release.
 
 /**********************************************************************
-cadler fork: unclamped NURBS clamped where they are read (SmClampNurbs.h). Boehm's knot insertion
+smlib-rs: unclamped NURBS clamped where they are read (SmClampNurbs.h). Boehm's knot insertion
 on the homogeneous control points: the domain's start knot is inserted until it is there degree
 times, the control points and knots ahead of it are dropped, and the same at the end.
 **********************************************************************/

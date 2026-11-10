@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************//**
 * FILE NAME --- SmThreadLocalStorage.cpp
@@ -329,8 +330,8 @@ SmBoolean SmThreadLocalStorage::GetBeenThroughNew
 // for no SM_USE_WIN_THREADS, SM_USE_PTHREADS - define global callback pointer
 #if !defined(SM_USE_WIN_THREADS) && !defined(SM_USE_PTHREADS)
 static SmErrorCallbackFunctionPtr s_pfErrCallbackFunction;
-static SM_THREAD_LOCAL ULONG s_lSERDepth = 0 ;          // per thread (cadler fork)
-static SM_THREAD_LOCAL ULONG s_lAssertValidDepth = 0 ;  // per thread (cadler fork)
+static SM_THREAD_LOCAL ULONG s_lSERDepth = 0 ;          // per thread (smlib-rs)
+static SM_THREAD_LOCAL ULONG s_lAssertValidDepth = 0 ;  // per thread (smlib-rs)
 #endif
 
 /*******************************************************************//**

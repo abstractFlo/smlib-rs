@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /*******************************************************************//**
 * FILE NAME --- SmBrep.cpp
@@ -13260,7 +13261,7 @@ SmBoolean bDebugMe=FALSE;
           pFace->GetLoops(sFaceLoops) ;
           // SmLoop  * pFaceOuterLoop = sFaceLoops[0] ;
 
-          // cadler: an inner loop only moves to pNewF when its test point lies inside pNewF's outer
+          // smlib-rs: an inner loop only moves to pNewF when its test point lies inside pNewF's outer
           // loop (out of pFace's outer loop means in pNewF's, the two split one face). On a plane all
           // of that lies within the box round the loop's edges (on a curved surface it can bulge out:
           // a cap above its circle), so a test point outside the box keeps the loop where it is
@@ -27212,7 +27213,7 @@ SmStatus SmBrep::SqueezeEdge
           // Was previously based on ordering in sEdgeuses
           // No, don't skip anything, have to do both, or there will be stale pointers
           // in the Mate Loopuse. [Bug_230221]
-          // cadler fork: both edgeuses of the strut lie in this loopuse, and the first one made it a
+          // smlib-rs: both edgeuses of the strut lie in this loopuse, and the first one made it a
           // vertex loop already. A second vertexuse replaced the first in the loopuse, but the first
           // stayed on the vertex, and walking it after the loop was deleted crashed (a cube's top
           // rounded with its corner edges, SmBrep::DeleteFace -> ShellTraversal).

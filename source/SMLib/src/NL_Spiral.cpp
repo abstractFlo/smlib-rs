@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************/
 /* Spiral.c: Curve and surface spiral routines                        */
@@ -19,7 +20,7 @@ static int ST_GetPointAtAngleD( NL_REAL Theta, NL_POINT *xyz );
 /**********************************************************************/
 
 static constexpr NL_REAL TWOPI = 6.2831853071795864;
-/* the spiral being built: per thread, set by each call (cadler fork) */
+/* the spiral being built: per thread, set by each call (smlib-rs) */
 static thread_local int RL = 1;
 static thread_local NL_INDEX nSpans = 8;
 static thread_local NL_REAL dTurns = 1.0;

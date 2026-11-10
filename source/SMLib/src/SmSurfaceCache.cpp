@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************//**
 * FILE NAME --- SmSurfaceCache.cpp
@@ -1267,7 +1268,7 @@ SmStatus SmBezierAux2d::BuildPolarBox()
     pNodes.Pop(pLastNode);
     pAuxs.Pop(pLastAux);
 
-    // cadler fork: nodes of a Bezier decomposition carry no surface (mBA_pSurface), so there is
+    // smlib-rs: nodes of a Bezier decomposition carry no surface (mBA_pSurface), so there is
     // nothing to build the box from; it is made unbounded (two opposite vectors), which every
     // polar box test takes as "any normal" (a ray fired at a cube's rounded top rounded again at
     // its seams, 100 mm by 49.995, called through the missing surface)

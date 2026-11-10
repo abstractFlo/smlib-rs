@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /*******************************************************************//**
 * FILE NAME --- SmBSplineCurve.cpp
@@ -7451,7 +7452,7 @@ SmStatus SmBSplineCurve::ReadFromDB
       SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
     }    
 
-  // cadler fork: an unclamped knot vector (as STEP has them) clamped, the same curve
+  // smlib-rs: an unclamped knot vector (as STEP has them) clamped, the same curve
   sm_ClampNurbCurve(cur) ;
 
   // Set output - the curve now owns the NURB

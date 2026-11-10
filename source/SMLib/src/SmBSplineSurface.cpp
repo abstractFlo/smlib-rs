@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /*******************************************************************//**
 * FILE NAME --- SmBSplineSurface.cpp
@@ -6575,7 +6576,7 @@ SmStatus SmBSplineSurface::ReadFromDB
   SmKnotType            eKnotType           = (SmKnotType) lKnotType ;             
   SmBSplineSurfaceForm  eBSplineSurfaceForm = (SmBSplineSurfaceForm) lBSplineSurfaceForm ;
 
-  // cadler fork: unclamped knot vectors (as STEP has them) clamped, the same surface
+  // smlib-rs: unclamped knot vectors (as STEP has them) clamped, the same surface
   sm_ClampNurbSurface(sur) ;
 
   // set output - the surface now owns the NURB

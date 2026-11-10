@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************
 FILE NAME: SmApiBrep.cpp
@@ -2144,7 +2145,7 @@ SmApiStatus SmApiFilletEdgesPerEdge
 /*******************************************************************//**
 PURPOSE --- Chamfer edges setting each of an edge's two faces back by a distance of its own
 
-NOTES ---   cadler fork. A fillet of linear section whose two faces are offset by radii of
+NOTES ---   smlib-rs. A fillet of linear section whose two faces are offset by radii of
             their own (SmConstantRadiusFS's second radius): the chamfer face is the ruled
             surface between the lines where it meets the faces. With a the angle between the
             faces' binormals at the edge's middle (the wedge of material the chamfer cuts), a

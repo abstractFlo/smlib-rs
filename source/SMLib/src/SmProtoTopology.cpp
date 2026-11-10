@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************
 * FILE NAME --- SmProto.cpp
@@ -5893,7 +5894,7 @@ static int iDebugLevel=0;
 
 } // end SmProtoTopologyManager::UpdateFaces
 
-// cadler fork: a vertex glued away is unmated first, as the squeezing branches do; its mate
+// smlib-rs: a vertex glued away is unmated first, as the squeezing branches do; its mate
 // was left pointing at the deleted vertex, and DoFilleting marked it through that pointer (a
 // cube's rounded top rounded again at its seams, 20 mm by 9.97)
 static void sm_UnmateVertex(SmTopologyIntersector *pTI, SmVertex *pVertex, int iWhichBrep)
@@ -6125,7 +6126,7 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
                   {
                       // Here we have coincident Vertices connected by a long Edge.
                       // We should Glue these.
-                      // cadler fork: unless an earlier common Edge glued or squeezed pBrep1Vtx2
+                      // smlib-rs: unless an earlier common Edge glued or squeezed pBrep1Vtx2
                       // away already; gluing the deleted Vertex crashed (a cube's rounded top
                       // rounded again at its seams, 400 mm by 199.94).
                       if(   pBrep1Vtx1 != pBrep1Vtx2
@@ -6223,7 +6224,7 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
                   {
                       // Here we have coincident Vertices connected by a long Edge.
                       // We should Glue these.
-                      // cadler fork: unless an earlier common Edge glued or squeezed pBrep2Vtx2
+                      // smlib-rs: unless an earlier common Edge glued or squeezed pBrep2Vtx2
                       // away already; gluing the deleted Vertex crashed (a cube's rounded top
                       // rounded again at its seams, 400 mm by 199.94).
                       if(   pBrep2Vtx1 != pBrep2Vtx2

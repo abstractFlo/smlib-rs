@@ -1,0 +1,16 @@
+[package]
+name = "smlib"
+version = "0.1.0"
+description = "Safe Rust bindings to SMLib, the NURBS B-rep solid modelling kernel from NVIDIA's usd-brep (unofficial)"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../README.md"
+keywords = ["cad", "brep", "nurbs", "geometry", "solid-modeling"]
+categories = ["api-bindings", "graphics", "mathematics"]
+
+[dependencies]
+smlib-sys = { path = "../smlib-sys", version = "0.1.0" }
+
+[dev-dependencies]
+serde_json = "1"

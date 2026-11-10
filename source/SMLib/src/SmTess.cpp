@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 
 /**********************************************************************//**
@@ -9541,7 +9542,7 @@ SmStatus SmTess::TriangulateSingleFace
 
     } // End Scope - Prepare for Triangulation iteration, build Vertex Spatial tree, assign PolyEdges Index Values
 
-  // cadler: a large polygon on a plane (a plate's face with 600 holes joined into one loop: 15000
+  // smlib-rs: a large polygon on a plane (a plate's face with 600 holes joined into one loop: 15000
   // corners) is cut ear by ear in the order a walk round it meets them, as earcut does. The corner
   // search below scans every corner for the best one before each cut, the square of the corners
   // (0.5 s for that face); on a plane which corner goes first does not show. Each cut is the one the

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************//**
 * FILE NAME --- SmTopologyTraverser.cpp
@@ -1118,7 +1119,7 @@ SmBoolean bDebugMe = FALSE;
               for (ULONG j=0; j<sVertexuses.GetSize(); j++) 
                 {
                   SmVertexuse *pVU = sVertexuses[j];
-                  // cadler fork: an edgeuse left without its vertexuse while a boolean deletes
+                  // smlib-rs: an edgeuse left without its vertexuse while a boolean deletes
                   // faces (name-money-box with small clips) crashed here; fail the traversal
                   NER(pVU);
                   // for unprocessed vertices attached to the target shell

@@ -1,41 +1,46 @@
 #!/usr/bin/env bash
 # SMLib in several threads, checked (release on Linux and macOS, tsan and globals on Linux):
 #
-#   cadler/threads/run.sh release [threads] [passes]   harness against the built release libraries:
-#                                                      results bit for bit and the speedup
-#   cadler/threads/run.sh tsan [threads] [passes]      SMLib, SM_API and the harness built from source
-#                                                      under ThreadSanitizer: fails on any data race
-#                                                      (needs only g++, no prebuild)
-#   cadler/threads/run.sh globals                      writable globals of the built libraries
-#                                                      against allowed.txt (writable_globals.py)
+#   tools/threads/run.sh release [threads] [passes]   harness against the library smlib-sys builds:
+#                                                     results bit for bit and the speedup
+#   tools/threads/run.sh tsan [threads] [passes]      SMLib, SM_API and the harness built from source
+#                                                     under ThreadSanitizer: fails on any data race
+#                                                     (needs only g++)
+#   tools/threads/run.sh globals                      writable globals of that library against
+#                                                     allowed.txt (writable_globals.py)
 #
-# release and globals need a release build in _build (cadler/build-linux.sh, build-macos.sh or
-# repo.sh build -r). Windows: run-windows.ps1.
+# release and globals build smlib-sys first (cargo build --release). Windows: run-windows.ps1.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-HERE="$ROOT/cadler/threads"
-OUT="$ROOT/_build/threads"
+HERE="$ROOT/tools/threads"
+OUT="$ROOT/target/threads"
 if [ "$(uname)" = Darwin ]; then
-  LIBS="$ROOT/_build/macos-universal/release"
   CXX="${CXX:-c++}"
+  JOBS="$(sysctl -n hw.ncpu)"
 else
-  LIBS="$ROOT/_build/linux-$(uname -m)/release"
   CXX="${CXX:-g++}"
+  JOBS="$(nproc)"
 fi
 MODE="${1:-release}"
 THREADS="${2:-1,2,4,8,16}"
 PASSES="${3:-3}"
-# as premake builds them (compile_commands.json); the first include dir decides which StdAfx.h a source gets
-COMMON=(-std=c++17 -DNDEBUG -DNOMINMAX -DSM_GRAPHICS_CALLBACKS=1 -w)
+# as smlib-sys builds them; the first include dir decides which StdAfx.h a source gets
+COMMON=(-std=c++17 -DNDEBUG -DNOMINMAX -DSM_GRAPHICS_CALLBACKS=1 -DSM_API_EXPORTS -w)
 FLAGS=("${COMMON[@]}" -I"$ROOT/source/SM_API/inc" -I"$ROOT/source/SMLib/inc")
 SMLIB_FLAGS=("${COMMON[@]}" -I"$ROOT/source/SMLib/inc")  # TBB only with SM_USE_TBB, which nothing sets
-SM_API_FLAGS=("${COMMON[@]}" -DSM_API_EXPORTS -I"$ROOT/source/SM_API/inc" -I"$ROOT/source/SMLib/inc")
+SM_API_FLAGS=("${COMMON[@]}" -I"$ROOT/source/SM_API/inc" -I"$ROOT/source/SMLib/inc")
 mkdir -p "$OUT"
+
+built_library() {  # the newest libsmlib.a of a release build of smlib-sys
+  cargo build --quiet --release -p smlib-sys --manifest-path "$ROOT/Cargo.toml"
+  find "$ROOT/target/release/build" -name libsmlib.a -print0 | xargs -0 ls -t | head -1
+}
 
 case "$MODE" in
   release)
-    "$CXX" -O2 -g "${FLAGS[@]}" "$HERE/harness.cpp" -o "$OUT/harness" -L"$LIBS" -lSM_API -lSMLib -lpthread -Wl,-rpath,"$LIBS"
+    LIBRARY="$(built_library)"
+    "$CXX" -O2 -g "${FLAGS[@]}" "$HERE/harness.cpp" "$LIBRARY" -o "$OUT/harness" -lpthread
     "$OUT/harness" --threads "$THREADS" --passes "$PASSES"
     ;;
   tsan)
@@ -46,7 +51,7 @@ case "$MODE" in
     compile() {  # library, its flags...: every source of source/<library>/src, changed ones only
       local library="$1"
       shift
-      printf '%s\n' "$ROOT/source/$library/src/"*.cpp | xargs -P "$(nproc)" -I{} sh -c '
+      printf '%s\n' "$ROOT/source/$library/src/"*.cpp | grep -vE '/(SmDllMain|StdAfx)\.cpp$' | xargs -P "$JOBS" -I{} sh -c '
         object="$0/$1-$(basename "{}" .cpp).o"
         shift
         [ "$object" -nt "{}" ] || g++ -O1 -g -fsanitize=thread -fPIC "$@" -c "{}" -o "$object"
@@ -60,7 +65,7 @@ case "$MODE" in
       "$OUT/harness-tsan" --threads "${2:-2,8}" --passes "${3:-1}"
     ;;
   globals)
-    python3 "$HERE/writable_globals.py" "$LIBS"
+    python3 "$HERE/writable_globals.py" "$(built_library)"
     ;;
   *)
     echo "usage: $0 release|tsan|globals [threads] [passes]" >&2

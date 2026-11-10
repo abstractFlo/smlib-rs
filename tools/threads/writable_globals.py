@@ -5,11 +5,14 @@ SMLib runs in several threads of one process only while every global it writes i
 merge or a change of ours, fails this check until it is either made thread_local or added to
 allowed.txt with the reason it is safe (names there may use * and ?).
 
-    python3 cadler/threads/writable_globals.py <lib dir>            # check
-    python3 cadler/threads/writable_globals.py <lib dir> --list     # print what the libraries have
+    python3 tools/threads/writable_globals.py <libsmlib.a>            # check
+    python3 tools/threads/writable_globals.py <libsmlib.a> --list     # print what the library has
+
+The library is the one smlib-sys builds (tools/threads/run.sh globals finds it): SMLib, SM_API and
+the C interface in one archive.
 
 Reads `objdump -t -C`: objects in .data and .bss (thread_local ones are in .tdata/.tbss, and
-constants in .rodata/.data.rel.ro, so neither shows up). Linux builds only.
+constants in .rodata/.data.rel.ro, so neither shows up). Linux builds only (GNU objdump).
 """
 
 from __future__ import annotations
@@ -20,7 +23,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-LIBRARIES = ["libSMLib.so", "libSM_API.so"]
 WRITABLE_SECTIONS = {".data", ".bss"}
 ALLOWED = Path(__file__).with_name("allowed.txt")
 
@@ -50,8 +52,7 @@ def allowed() -> set[str]:
 
 
 def main(arguments: list[str]) -> int:
-    directory = Path(arguments[0])
-    found = set().union(*(writable_globals(directory / library) for library in LIBRARIES))
+    found = writable_globals(Path(arguments[0]))
     if "--list" in arguments:
         print("\n".join(sorted(found)))
         return 0

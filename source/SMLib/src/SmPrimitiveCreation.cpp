@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************//**
 * FILE NAME --- SmPrimitiveCreation.cpp
@@ -5342,7 +5343,7 @@ SmStatus SmPrimitiveCreation::CreateCurveSweep
 // Transform each profile according to input parameters to align with path
 // Then move resulting surface back to original path position
   ULONG lNumComposites = sComposites.GetSize();
-  // cadler: for each side face, where its swept surface starts and ends along the path
+  // smlib-rs: for each side face, where its swept surface starts and ends along the path
   std::vector< std::pair<double, double> > sSweptAlong;
   for(ii = 0; ii < lNumComposites; ii++)
   {
@@ -5369,7 +5370,7 @@ SmStatus SmPrimitiveCreation::CreateCurveSweep
 
     // For now subdivide at G1 continuities to make things
     // which are more filletable.
-    // cadler: the swept surface's extent along the path, before CreateFacesFromSurface
+    // smlib-rs: the swept surface's extent along the path, before CreateFacesFromSurface
     // (which deletes it when it splits it into several faces)
     const SmExtent2d sSweptDomain = pNewBSS->GetNaturalUVDomain();
 
@@ -5433,7 +5434,7 @@ SmStatus SmPrimitiveCreation::CreateCurveSweep
 
     SmExtent2d sDomain;
 
-    // cadler: CreateFacesFromSurface splits a swept surface into several faces where it is not
+    // smlib-rs: CreateFacesFromSurface splits a swept surface into several faces where it is not
     // smooth enough, around the profile as well (a circle's quarters). The caps are made from
     // every side face that reaches the start or the end of the path, not from the first and
     // last lNumCurves faces, which held only a quarter of a circle then: an open loop, and the

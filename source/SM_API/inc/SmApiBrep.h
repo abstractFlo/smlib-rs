@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 
 /**********************************************************************
@@ -451,7 +452,7 @@ SMAPI_EXPORT SmApiStatus SmApiFilletEdgesPerEdge(
     double dThumbweight                                    ///< [in ]: Thumbweight for blend (default 1.0)                <br>
 );
 
-/// cadler fork: chamfer edges, setting the face `rRefFaces[i]` (one of edge i's two faces) back by
+/// smlib-rs: chamfer edges, setting the face `rRefFaces[i]` (one of edge i's two faces) back by
 /// `rDistances1[i]` and the other face by `rDistances2[i]`. SM_ERR_INVALID_INPUT for a face not
 /// on its edge, an edge whose faces run on into each other, or a pair the edge's angle cannot
 /// take (on an acute edge, one much larger than the other).

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************//**
 * FILE NAME --- SmFilletExec.cpp
@@ -1022,7 +1023,7 @@ SmStatus SmFilletExecutive::SetFilletParameters
         {
           case SM_FS_CONST_RADIUS:
             {
-              // cadler fork: the second face offset by a radius of its own (a two-distance chamfer)
+              // smlib-rs: the second face offset by a radius of its own (a two-distance chamfer)
               double dSecondRadius = dRadius;
               double *pdSecondRadius = NULL;
               if ( pOptSecondRadii != NULL && ii < pOptSecondRadii->GetSize() )
@@ -1910,7 +1911,7 @@ SmBoolean bDebugMe = FALSE;
               sm_GraphicsLoop();
           }
 #endif // SM_DEBUG_CODE
-          // cadler fork: this vertex and the ones after it still map to their arrays of edgeuses,
+          // smlib-rs: this vertex and the ones after it still map to their arrays of edgeuses,
           // which later lookups (GetFilletCornerOfVertex) would take for corners and crash on (an
           // imported assembly with every edge rounded): fail the fillet instead, freeing them
           for (ULONG kk=ii; kk<lNumFVs; kk++)

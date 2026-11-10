@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************
 * FILE NAME --- SmMerge.cpp
@@ -881,7 +882,7 @@ SmBoolean bDebugMe=FALSE;
       if(!pEdge->IsTopological(pSurfToKeep, dDistBetween, 10.0, &sMergedFaceDomain)) // note: ApproxTol3d Gain = 10.0 is different than
         { continue ; }                                           //       Gain  1.0 Tol used in SmBrep::RemoveTopologicalEdgesAndVertices()
 
-      // cadler fork: an edge between two loops of one face is kept. DeleteEdge takes two loops
+      // smlib-rs: an edge between two loops of one face is kept. DeleteEdge takes two loops
       // for two faces to merge, and with one face it deleted that face and its surface (a
       // cube's rounded top rounded again at its seams, 40 mm by 19.96).
       {

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /*****************************************************************************/
 /* NL_Geom.c : NLib Geometry Function Definitions                            */
@@ -16,7 +17,7 @@
 NL_REAL ST_havers( NL_REAL );
 NL_REAL ST_mmxaps( NL_REAL );
 
-/* Thread Local Storage for ST_mmxaps (thread_local: cadler fork) */
+/* Thread Local Storage for ST_mmxaps (thread_local: smlib-rs) */
 static thread_local NL_REAL *ST_mmxaps_xp;
 static thread_local NL_REAL *ST_mmxaps_yp;
 static thread_local NL_INDEX ST_mmxaps_gn;

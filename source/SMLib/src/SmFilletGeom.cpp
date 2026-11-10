@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************//**
 * FILE NAME --- SmFilletGeom.cpp
@@ -595,7 +596,7 @@ static int sm_ClassifyFacePoint( const SmPoint3d & rPos, SmFace *pOrigFace, SmFa
 } // end static sm_ClassifyFacePoint
 
 /*******************************************************************//**
-PURPOSE: cadler fork: the normal of each surface at a point of a fillet/fillet
+PURPOSE: smlib-rs: the normal of each surface at a point of a fillet/fillet
   intersection, through the intersection's UVTrimCurves.
 
 NOTES: Returns the sine of the angle between the two normals.
@@ -621,7 +622,7 @@ static SmStatus sm_XsectNormals
 } // end sm_XsectNormals
 
 /*******************************************************************//**
-PURPOSE: cadler fork: straighten the end of a fillet/fillet intersection
+PURPOSE: smlib-rs: straighten the end of a fillet/fillet intersection
   curve where the two surfaces touch.
 
 NOTES: Two G2 fillets that meet at a corner vertex on a face both of them run
@@ -1223,7 +1224,7 @@ static ULONG lDebugCount = 0 ;
 /*******************************************************************//**
 PURPOSE: Find the intersection curve of two surfaces.
 
-NOTES: cadler fork: sm_SrfSrfIntersectionCurves() finds it; an end at a given
+NOTES: smlib-rs: sm_SrfSrfIntersectionCurves() finds it; an end at a given
   vertex where the surfaces touch is straightened there
   (sm_StraightenTangentialXsectEnd).
 ***********************************************************************/

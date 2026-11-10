@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************
 FILE NAME: SmApiGeneral.h
@@ -35,15 +36,15 @@ class SmAxis2Placement;
 class SmVector3d;
 
 
-// Context and concurrency (cadler fork): the default SmContext (SmApiGetOrCreateContext())
+// Context and concurrency (smlib-rs): the default SmContext (SmApiGetOrCreateContext())
 // is per thread, and so is every global SMLib writes during an operation
-// (cadler/threads/allowed.txt lists the writable globals left and why they are safe).
+// (tools/threads/allowed.txt lists the writable globals left and why they are safe).
 // Threads may run SM_API operations at the same time on objects of their own. An
 // object belongs to the thread whose context built it: another thread may use it
 // only while that thread does not run SM_API calls, and copies of an object two
 // threads share are taken under a lock of that object. A running operation cannot
 // be cancelled. SmApiDeleteContext() frees the context of a thread that ends.
-// Checked by cadler/threads (harness under ThreadSanitizer, writable_globals.py).
+// Checked by tools/threads (harness under ThreadSanitizer, writable_globals.py).
 SMAPI_EXPORT void SmApiCreateContext();
 SMAPI_EXPORT SmContext* SmApiGetOrCreateContext();
 SMAPI_EXPORT void SmApiDeleteContext();

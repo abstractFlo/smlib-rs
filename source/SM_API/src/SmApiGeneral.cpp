@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 
 /**********************************************************************
@@ -31,7 +32,7 @@ GENERAL NOTES:
 #include <SmApiTypes.h>
 
 // One default context per thread: SMLib marks topology through counters and locks of its
-// context, so threads that share one race (cadler: docs/kernel-threads-messung.md).
+// context, so threads that share one race (docs/concurrency.md).
 SM_THREAD_LOCAL SmContext* pGlobalContext = NULL;
 
 

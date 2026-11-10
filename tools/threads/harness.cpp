@@ -1,4 +1,4 @@
-// SM_API in several threads of one process: every operation cadler uses runs in 1 to N threads at
+// SM_API in several threads of one process: every operation the smlib crate uses runs in 1 to N threads at
 // once, each thread building its own objects, and each result is compared bit for bit with the
 // same sequence run alone in a fresh thread (volume, area, topology, tessellation). Then bodies
 // crossing threads: one handed on once its builder rests, one taken as a boolean's tool, and
@@ -207,7 +207,7 @@ SmApiStatus filletAll(SmBrep* body, double radius)
     return SmApiFilletEdges(body, edges, radius, 1, 1, 1.0);
 }
 
-// A rounded box with a hole through it: what most of cadler's models are made of.
+// A rounded box with a hole through it: what most mechanical parts are made of.
 SmBrep* roundedBoxWithHole()
 {
     SmBrep* body = box(0, 0, 0, 40, 30, 20);
@@ -225,7 +225,7 @@ std::basic_string<TCHAR> nativePath(const std::string& path)
     return std::basic_string<TCHAR>(path.begin(), path.end());
 }
 
-// A native SMLib file of a rounded box with a hole, as cadler's STEP import writes one to read it
+// A native SMLib file of a rounded box with a hole, as a STEP import writes one to read it
 // back (`Brep.read_from_file`); deleted at the end.
 std::string writeImportFile()
 {
@@ -248,7 +248,7 @@ struct Operation
     std::function<Fingerprint()> run;
 };
 
-// The operations cadler's kernel uses, each building what it needs in the calling thread.
+// The operations the smlib crate uses, each building what it needs in the calling thread.
 std::vector<Operation> operations()
 {
     return {
@@ -643,7 +643,7 @@ std::vector<Operation> operations()
              return fingerprintOf(status, body);
          }},
         {"Bezier arch (canonical curve), extruded", [] {
-             // a sketch's Bezier segment as cadler builds it, closed by a line and extruded
+             // a sketch's Bezier segment, closed by a line and extruded
              SmTArray<SmPoint3d> points;
              points.Add(SmPoint3d(0, 0, 0));
              points.Add(SmPoint3d(5, 15, 0));
@@ -669,7 +669,7 @@ std::vector<Operation> operations()
              return fingerprintOf(status, result);
          }},
         {"rational arc (weighted canonical curve), extruded", [] {
-             // a quarter circle as cadler's loft alignment builds arcs: degree 2 with weights
+             // a quarter circle as a loft's alignment builds arcs: degree 2 with weights
              const double weight = std::cos(pi / 4.0);
              SmTArray<SmPoint3d> points;
              points.Add(SmPoint3d(10, 0, 0));
@@ -715,7 +715,7 @@ std::vector<Operation> operations()
              return fingerprintOf(status, result);
          }},
         {"body placed by a transform", [] {
-             // a tilted frame, as cadler places copies and tilted cuts
+             // a tilted frame, as placed copies and tilted cuts use
              SmBrep* body = roundedBoxWithHole();
              const SmVector3d across(0.8, 0.6, 0.0);
              const SmVector3d up(-0.36, 0.48, 0.8);

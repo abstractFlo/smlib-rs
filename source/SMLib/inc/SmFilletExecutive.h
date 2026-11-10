@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /*******************************************************************//**
 * FILE NAME --- SmFilletExecutive.h
@@ -305,7 +306,7 @@ public:
     ULONG                                      lContinuity=1,     ///< [in] : 1, 2, or 3 for G1, G2, or G3                         <br>
                                                                   ///< [in] : Used only when eXSectType == SM_FSG_BLEND_CURVE      <br>
     double                                     dThumbweight=1.0,  ///< [in] : Used only when eXSectType == SM_FSG_BLEND_CURVE      <br>
-    SmTArray< double >                       * pOptSecondRadii=NULL ///< [in] : cadler fork: per edge, the radius of the second  <br>
+    SmTArray< double >                       * pOptSecondRadii=NULL ///< [in] : smlib-rs: per edge, the radius of the second  <br>
                                                                   ///<        face's offset (the radial edgeuse's), for         <br>
                                                                   ///<        SM_FS_CONST_RADIUS; NULL: both radii the same.    <br>
                                                                   ///<        Only for SM_FSG_LINEAR sections (a two-distance  <br>

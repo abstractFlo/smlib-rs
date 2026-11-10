@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************//**
 * FILE NAME --- SmFilletSolver.cpp
@@ -3601,7 +3602,7 @@ int iDebugLevel = DebugLevel();
 
       // Take a small forward step.
       // (Use a static value, as a debugging aid.)
-// per thread (cadler fork): set by the first call, as it is per process without threads
+// per thread (smlib-rs): set by the first call, as it is per process without threads
 static thread_local double sdStaticStep =   (rTsectPnt.m_ePointType == SM_IP_TANGENT_POINT)
                      ? 1.0e-3
                      : 1.0e-5;  // (1e-8 is too small: noise)

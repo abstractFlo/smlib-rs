@@ -1,0 +1,2 @@
+# the crash cases are SMLib text files, read byte for byte
+smlib/tests/crashes/*.txt -text

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************//**
 * FILE NAME --- SmSurfaceIntersector.cpp 
@@ -7153,7 +7154,7 @@ static ULONG lDebugCount = 0 ;
   SmBoolean bIsSingular = FALSE;
   SmTsectPnt *pLast             = crTsectPoints.GetLast();
   ULONG       lTotalTsectPoints = crTsectPoints.GetSize();
-static SM_THREAD_LOCAL SmBoolean bInsideMe = FALSE; // recursion guard: per thread (cadler fork)
+static SM_THREAD_LOCAL SmBoolean bInsideMe = FALSE; // recursion guard: per thread (smlib-rs)
   if (rp3DCurve && pLast->m_dCurveParameter < 0.0 && !bInsideMe) 
     {
       if ( pFinalTSP != NULL )

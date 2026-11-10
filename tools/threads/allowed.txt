@@ -1,0 +1,58 @@
+# The writable globals of SMLib and SM_API (in libsmlib.a) that may stay process-wide when SM_API runs in
+# several threads (writable_globals.py checks the built library against this list). Each group
+# says why it is safe. A name may use * and ? (fnmatch). Everything an operation writes is
+# thread_local instead (commit "SMLib in threads").
+
+# NLib constants and tolerances: initialised in NL_Globals.cpp, Gauss tables, never written
+libsmlib.a: NL_CZERO
+libsmlib.a: NL_ZERO
+libsmlib.a: NL_UNIT*
+libsmlib.a: NL_DMAX
+libsmlib.a: NL_CCPLIM
+libsmlib.a: NL_LTOL
+libsmlib.a: NL_LUDT
+libsmlib.a: NL_PTOL
+libsmlib.a: NL_WTOL
+libsmlib.a: NL_ZCTL
+libsmlib.a: NL_ZDTL
+libsmlib.a: NL_WMIN
+libsmlib.a: NL_WMAX
+libsmlib.a: NL_RECURSELIM
+libsmlib.a: NL_PascalTri
+libsmlib.a: N_gauss_pt
+libsmlib.a: N_gauss_wt
+libsmlib.a: SM_gauss_pt
+libsmlib.a: SM_gauss_wt
+libsmlib.a: N_ApproxSrfWithQuadSrf::ch
+libsmlib.a: N_ApproxSrfWithQuadSrf::uh
+libsmlib.a: N_ApproxSrfWithQuadSrf::vh
+libsmlib.a: badmem
+
+# label tables of the AssertValid reports and trimming checks: string constants, only read
+libsmlib.a: sAssert*_list
+libsmlib.a: sTrimmingCheck*_list
+
+# static const empty sets, built once by a thread-safe static initialiser, then only read
+libsmlib.a: SmMapPtrToPtrs<*>::At(*) const::emptyValueSet
+
+# switches and callbacks a program sets once at startup, before its threads run
+libsmlib.a: NLIBCHKBYPASS
+libsmlib.a: SM_bAssertValidStream
+libsmlib.a: b_DoGraphics
+libsmlib.a: b_Output*
+libsmlib.a: c3d_smlib_error_handler
+libsmlib.a: s_pfBrepListClearFun
+libsmlib.a: s_pfBrepListFun
+libsmlib.a: s_pfErrCallbackFunction
+libsmlib.a: s_pfExcapeCallbackFun
+libsmlib.a: s_pfUICallbackFun
+libsmlib.a: Draw*CallBack
+
+# graphics and debug output: only with b_DoGraphics or an output stream a debugger sets up
+libsmlib.a: s_Disp
+libsmlib.a: s_View
+libsmlib.a: s_pContext
+libsmlib.a: s_CounterList
+libsmlib.a: smgfx_ChangeColor(*)::lCount
+libsmlib.a: smgfx_ChangeOutputColor(*)::lCount
+libsmlib.a: SmPolygonSLPOutput::OutputPolygon(*)::lCount

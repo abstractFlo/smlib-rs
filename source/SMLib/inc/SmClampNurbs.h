@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Added in smlib-rs, not part of an NVIDIA release.
 
 /**********************************************************************
-cadler fork: NURBS read with an unclamped knot vector (STEP allows them; OpenCASCADE, and with it
+smlib-rs: NURBS read with an unclamped knot vector (STEP allows them; OpenCASCADE, and with it
 FreeCAD, writes closed periodic B-splines so) are clamped where they are read: the end knots of the
 domain repeated degree + 1 times, the same curve or surface on the domain. SMLib reads unclamped
 ones, then overruns its arrays splitting them into Beziers (sm_CreateBezSegments, sm_DecomposeSrf)
