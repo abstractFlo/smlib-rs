@@ -75,7 +75,16 @@ fn main() {
     interface.include(&shim).include(&sm_api_include).include(&smlib_include);
     objects.extend(interface.file(shim.join("shim.cpp")).compile_intermediates());
 
-    cc::Build::new().cpp(true).objects(objects).compile("smlib");
+    let mut library = cc::Build::new();
+    library.cpp(true).objects(objects);
+    if target.is("emscripten") {
+        // Emscripten's own libc++ and libc++abi, built for WebAssembly exceptions as SMLib is
+        library.cpp_link_stdlib(None);
+        println!("cargo:rustc-link-arg=-fwasm-exceptions");
+        println!("cargo:rustc-link-lib=c++");
+        println!("cargo:rustc-link-lib=c++abi");
+    }
+    library.compile("smlib");
 
     println!("cargo:source={}", source.display());
     println!("cargo:defines={}", defines.join(";"));
