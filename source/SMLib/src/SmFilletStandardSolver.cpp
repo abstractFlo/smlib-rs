@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /**********************************************************************//**
 * FILE NAME --- SmFilletStandardSolver.cpp
@@ -554,11 +555,20 @@ SmBoolean bDebugFVUs=FALSE;
                                                     sSrf1GuessPt3D,
                                                     m_dThisApproxTol3d, NULL, NULL,
                                                     SM_SR_SINGLE, sSolutions ));
-          if ( sSolutions.GetSize() != 1 )
-            { SER(SM_ERR); }
+          // No closest point on the edge (a guess just past its end can give none): leave
+          // bFoundSrf2UVGuess unset, so the guess is dropped on the surface below instead.
+          // Several: the closest of them.
+          if ( sSolutions.GetSize() > 0 )
+          {
+          ULONG lClosest = 0;
+          for ( ULONG lSolution = 1; lSolution < sSolutions.GetSize(); lSolution++ )
+          {
+              if ( sSolutions[lSolution].m_vStart.m_dSolutionValue < sSolutions[lClosest].m_vStart.m_dSolutionValue )
+                { lClosest = lSolution; }
+          }
 
           // get OtherFilletEdge Parameter
-          double dFilletEdgeT = sSolutions[0].m_vStart[0];
+          double dFilletEdgeT = sSolutions[lClosest].m_vStart[0];
 
           // If the curve is closed, and the solution is within tol of an
           // end point, snap the solution to whichever end (start or finish)
@@ -625,6 +635,7 @@ SmBoolean bDebugFVUs=FALSE;
               sm_GraphicsLoop() ;
       }
 #endif // SM_DEBUG_CODE
+          } // end found a closest point on the filleted edge
 
       } // end given OtherFilletEdge check
 

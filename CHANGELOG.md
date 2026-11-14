@@ -8,6 +8,12 @@ NVIDIA's its SMLib is based on.
 
 ## [Unreleased]
 
+### Fixed
+
+- A fillet whose rail starts at a corner just past the end of the neighbouring filleted edge no
+  longer fails: where no closest point on that edge is found, the start is looked for on the
+  surface instead (a round over a rim that a smooth seam crosses failed at every radius).
+
 ## [0.1.0] - 2026-11-10
 
 Based on NVIDIA usd-brep 1.0.1. The first release: SMLib and SM_API from usd-brep, without its
