@@ -1,6 +1,6 @@
 [package]
 name = "smlib-sys"
-version = "0.1.0"
+version = "0.1.1"
 description = "Builds SMLib and SM_API, the NURBS B-rep kernel from NVIDIA's usd-brep, with a C interface, and links them (unofficial)"
 edition.workspace = true
 license.workspace = true
