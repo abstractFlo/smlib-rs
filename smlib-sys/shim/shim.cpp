@@ -717,6 +717,15 @@ int cs_edge_parameter_range(const CsEdge* value, double range[2])
     CS_TRY
     double low = 0.0, high = 0.0;
     CS_CHECK("SmApiEdgeParameterRange", SmApiEdgeParameterRange(asEdge(value), low, high));
+    // A split can leave an edge's interval a rounding step outside its curve's natural interval,
+    // where SmApiEvaluateCurve refuses the parameter: the edge's own end would not evaluate. Only
+    // that rounding step is taken back; an interval further out (a periodic curve's) stays as it is.
+    if (const SmCurve* curve = asEdge(value)->GetCurve()) {
+        const SmExtent1d natural = curve->GetNaturalInterval();
+        const double rounding = 1e-9 * (1.0 + natural.GetMax() - natural.GetMin());
+        if (low < natural.GetMin() && natural.GetMin() - low <= rounding) low = natural.GetMin();
+        if (high > natural.GetMax() && high - natural.GetMax() <= rounding) high = natural.GetMax();
+    }
     range[0] = low;
     range[1] = high;
     return 0;

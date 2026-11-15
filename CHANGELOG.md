@@ -8,6 +8,12 @@ NVIDIA's its SMLib is based on.
 
 ## [Unreleased]
 
+### Fixed
+
+- `Edge::parameter_range` no longer reaches a rounding step past the edge's curve: where a boolean
+  left an edge's interval starting 1e-16 before its curve's, `Edge::point_at` at the edge's own
+  start failed with `SmApiEvaluateCurve` `SM_ERR_INVALID_INPUT`.
+
 ## [0.1.1] - 2026-11-14
 
 Based on NVIDIA usd-brep 1.0.1.
