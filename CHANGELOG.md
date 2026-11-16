@@ -8,6 +8,10 @@ NVIDIA's its SMLib is based on.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-16
+
+Based on NVIDIA usd-brep 1.0.1.
+
 ### Fixed
 
 - `Edge::parameter_range` no longer reaches a rounding step past the edge's curve: where a boolean
@@ -66,6 +70,7 @@ OpenUSD layer, Python bindings and build tooling, with the changes below.
   reads them instead of crashing the volume.
 - Builds with gcc 15 under `-Werror`.
 
-[Unreleased]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/abstractFlo/smlib-rs/releases/tag/v0.1.0
