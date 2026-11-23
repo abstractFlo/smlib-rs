@@ -126,11 +126,10 @@ fn base_build(target: &Target, defines: &[&str]) -> cc::Build {
             .define("_CRT_SECURE_NO_WARNINGS", None)
             .define("_SCL_SECURE_NO_WARNINGS", None);
     } else {
-        build.flag("-w");
-    }
-    if target.is("linux") && target.architecture == "aarch64" {
-        // as usd-brep's Linux build: no fused multiply-add, so aarch64 rounds as x86-64 does
-        build.flag("-ffp-contract=off");
+        // as usd-brep builds for Linux aarch64, macOS and Android: no fused multiply-add, which gcc
+        // and clang use where the target always has one (aarch64: Apple silicon, iOS, Android), so
+        // every platform rounds as x86-64 and MSVC do; marginal geometry could take another branch
+        build.flag("-w").flag("-ffp-contract=off");
     }
     if target.is("emscripten") {
         build.flag("-fwasm-exceptions");

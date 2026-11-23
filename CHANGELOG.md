@@ -8,6 +8,12 @@ NVIDIA's its SMLib is based on.
 
 ## [Unreleased]
 
+### Changed
+
+- On macOS (Apple silicon) and iOS, SMLib no longer fuses multiply-adds (`-ffp-contract=off`), as
+  usd-brep's macOS build does since 1.0.2, so it rounds as on x86-64, Linux aarch64 and Windows. With fused multiply-adds, marginal geometry could take another branch
+  there: a boolean or a tessellation could give a different result than on the other platforms.
+
 ## [0.1.4] - 2026-11-23
 
 Based on NVIDIA usd-brep 1.0.2.
