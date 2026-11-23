@@ -14,6 +14,12 @@ NVIDIA's its SMLib is based on.
   usd-brep's macOS build does since 1.0.2, so it rounds as on x86-64, Linux aarch64 and Windows. With fused multiply-adds, marginal geometry could take another branch
   there: a boolean or a tessellation could give a different result than on the other platforms.
 
+### Fixed
+
+- `Brep::squeeze_face`, and SM_API's `SmApiRemoveFillet` and `SmApiRemoveFilletFaces`, fail and
+  leave the body as it was where copying it fails, instead of working on an incomplete copy or
+  restoring the body from one (`SmBrep::GetCopyStatus`, new in usd-brep 1.0.2).
+
 ## [0.1.4] - 2026-11-23
 
 Based on NVIDIA usd-brep 1.0.2.

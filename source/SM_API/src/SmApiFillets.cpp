@@ -314,11 +314,13 @@ static SmBoolean sm_IsSound(SmBrep* pBefore, SmBrep* pAfter)
     return pAfter->AssertValid(NULL, SM_LEVEL_2) && (!pBefore->IsManifoldSolid() || pAfter->IsManifoldSolid());
 }
 
-// pBrep becomes pWork; restored from a copy (best effort) if that fails.
+// pBrep becomes pWork; restored from a copy (best effort) if that fails. Left as it is when the
+// copy is incomplete.
 static SmStatus sm_Replace(SmBrep* pBrep, SmBrep* pWork)
 {
     SmBrep* pBackup = new (*pBrep->GetContext()) SmBrep(*pBrep, NULL, NULL);
     SmObjDelete sCleanBackup(pBackup);
+    SER(pBackup->GetCopyStatus());
 
     SmTemporaryChangeValue<SmBoolean> sEnableEdit(pBrep->m_bEditingEnabled, TRUE);
     SmStatus eReplaceStat = pBrep->RemoveAllTopology();
@@ -348,12 +350,18 @@ static void sm_GroupsOf(const SmTArray<SmFace*>& rFaces, const SmTArray<SmFace*>
 // A copy of pBrep to remove the faces at rIndices (in GetFaces() order) from, rRemove those faces
 // in it. Faces split along an edge though they lie on one surface (as a CAD program may leave
 // them after a union) are joined first: at such an edge a fillet's corner has a fourth edge,
-// which DeleteFilletFace cannot extend. Not when that would join one of rRemove away.
+// which DeleteFilletFace cannot extend. Not when that would join one of rRemove away. NULL when
+// the copy is incomplete.
 static SmBrep* sm_WorkCopy(SmBrep* pBrep, const SmTArray<ULONG>& rIndices, SmTArray<SmFace*>& rRemove)
 {
     for (ULONG lJoin = 1; ; lJoin = 0)
     {
         SmBrep* pWork = new (*pBrep->GetContext()) SmBrep(*pBrep, NULL, NULL);
+        if (pWork->GetCopyStatus() != SM_SUCCESS)
+        {
+            delete pWork;
+            return NULL;
+        }
         SmTArray<SmFace*> sFaces;
         pWork->GetFaces(sFaces);
         rRemove.ReSet();
@@ -415,6 +423,8 @@ static SmBrep* sm_WithoutFaces(SmBrep* pBrep, const SmTArray<ULONG>& rIndices, S
 {
     SmTArray<SmFace*> sRemove, sAlone, sTogether;
     SmBrep* pWork = sm_WorkCopy(pBrep, rIndices, sRemove);
+    if (pWork == NULL)
+        return NULL;
     SmObjDelete sCleanWork(pWork);
     for (ULONG ii = 0; ii < sRemove.GetSize(); ii++)
     {
@@ -455,6 +465,8 @@ static SmBrep* sm_DefeaturedCopy(SmBrep* pBrep, const SmTArray<ULONG>& rIndices)
 {
     SmTArray<SmFace*> sRemove;
     SmBrep* pWork = sm_WorkCopy(pBrep, rIndices, sRemove);
+    if (pWork == NULL)
+        return NULL;
     SmObjDelete sCleanWork(pWork);
     if (sm_DefeatureFaces(pWork, sRemove) != SM_SUCCESS || !sm_IsSound(pBrep, pWork))
         return NULL;

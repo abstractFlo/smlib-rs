@@ -77,6 +77,8 @@ SmApiStatus SmApiSqueezeFace
     const SmBoolean bWasSolid = pBrep->IsManifoldSolid();
     SmBrep* pBackup = new (crContext) SmBrep( *pBrep, NULL, NULL );
     SmObjDelete sCleanBackup( pBackup );
+    // without a whole copy a failure could not be undone: leave pBrep as it is
+    SER( pBackup->GetCopyStatus() );
 
     // where its corners are: what the vertex they become must reach
     SmTArray<SmVertex*> sCorners;
