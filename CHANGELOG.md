@@ -8,11 +8,16 @@ NVIDIA's its SMLib is based on.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-23
+
+Based on NVIDIA usd-brep 1.0.2.
+
 ### Changed
 
 - On macOS (Apple silicon) and iOS, SMLib no longer fuses multiply-adds (`-ffp-contract=off`), as
-  usd-brep's macOS build does since 1.0.2, so it rounds as on x86-64, Linux aarch64 and Windows. With fused multiply-adds, marginal geometry could take another branch
-  there: a boolean or a tessellation could give a different result than on the other platforms.
+  usd-brep's macOS build does since 1.0.2, so it rounds as on x86-64, Linux aarch64 and Windows.
+  With fused multiply-adds, marginal geometry could take another branch there: a boolean or a
+  tessellation could give a different result than on the other platforms.
 
 ### Fixed
 
@@ -114,7 +119,8 @@ OpenUSD layer, Python bindings and build tooling, with the changes below.
   reads them instead of crashing the volume.
 - Builds with gcc 15 under `-Werror`.
 
-[Unreleased]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/abstractFlo/smlib-rs/compare/v0.1.1...v0.1.2
