@@ -21,6 +21,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --release
+      # the crash tests 50 times more: a Windows run of 0.1.3 crashed in them once (0xc0000005)
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          for i in $(seq 50); do
+            cargo test --release -q -p smlib --test crashes || { echo "crashed in run $i of 50"; exit 1; }
+          done
       - run: cargo run --release --example drilled_box
 
   threads:
