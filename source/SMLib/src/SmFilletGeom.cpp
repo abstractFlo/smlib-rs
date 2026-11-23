@@ -6791,7 +6791,7 @@ SmStatus SmFilletEdge::CalcBlendingRail
             ULONG alKMData[2];
             SmTArray<ULONG> sKnotMult(2,alKMData,2);
             sKnotMult[0] = 4; sKnotMult[1] = 4;
-            SER(SmBSplineCurve::CreateCanonical(crContext,lCurveDim,2,
+            SER(SmBSplineCurve::CreateCanonical(crContext,lCurveDim,3,
                 sCntrlPoly, SM_CF_UNSPECIFIED, sKnotMult, sKnots,
                 SM_KT_UNSPECIFIED, NULL, NULL, pCurve));
         }
@@ -7564,7 +7564,7 @@ SmStatus SmFilletEdge::CalcRailRailInterpolation
             ULONG alKMData[2];
             SmTArray<ULONG> sKnotMult(2,alKMData,2);
             sKnotMult[0] = 4; sKnotMult[1] = 4;
-            SER(SmBSplineCurve::CreateCanonical(crContext,lCurveDim,2,
+            SER(SmBSplineCurve::CreateCanonical(crContext,lCurveDim,3,
                 sCntrlPoly, SM_CF_UNSPECIFIED, sKnotMult, sKnots,
                 SM_KT_UNSPECIFIED, NULL, NULL, pCurve));
         }

@@ -35,6 +35,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: tools/threads/run.sh release 1,2,4 1
+      # writable globals against allowed.txt; GNU objdump, so Linux only
+      - if: runner.os == 'Linux'
+        run: tools/threads/run.sh globals
 
   ios:
     runs-on: macos-latest

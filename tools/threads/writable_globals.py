@@ -11,8 +11,10 @@ allowed.txt with the reason it is safe (names there may use * and ?).
 The library is the one smlib-sys builds (tools/threads/run.sh globals finds it): SMLib, SM_API and
 the C interface in one archive.
 
-Reads `objdump -t -C`: objects in .data and .bss (thread_local ones are in .tdata/.tbss, and
-constants in .rodata/.data.rel.ro, so neither shows up). Linux builds only (GNU objdump).
+Reads `objdump -t -C`: objects in .data and .bss, or in a section of their own under them
+(.data.<name>, .data.rel.local.<name>, .bss.<name>: the cc crate compiles with -fdata-sections).
+thread_local ones are in .tdata/.tbss, and constants in .rodata/.data.rel.ro, so neither shows up.
+Linux builds only (GNU objdump).
 """
 
 from __future__ import annotations
@@ -23,7 +25,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-WRITABLE_SECTIONS = {".data", ".bss"}
+WRITABLE_SECTIONS = (".data", ".bss")
+READ_ONLY_SECTIONS = (".data.rel.ro",)  # written only by the loader's relocations
+
+
+def is_writable(section: str) -> bool:
+    """.data, .bss and their per-symbol sections (-fdata-sections), but not .data.rel.ro."""
+
+    def under(prefixes: tuple[str, ...]) -> bool:
+        return any(section == prefix or section.startswith(prefix + ".") for prefix in prefixes)
+
+    return under(WRITABLE_SECTIONS) and not under(READ_ONLY_SECTIONS)
 ALLOWED = Path(__file__).with_name("allowed.txt")
 
 # objdump -t: address, 7 flag characters, section, size, name (the flags can contain spaces)
@@ -41,7 +53,7 @@ def writable_globals(library: Path) -> set[str]:
         if not match:
             continue
         flags, section, name = match.groups()
-        if "O" in flags and section in WRITABLE_SECTIONS and not IGNORED.match(name):
+        if "O" in flags and is_writable(section) and not IGNORED.match(name):
             names.add(f"{library.name}: {name.strip()}")
     return names
 

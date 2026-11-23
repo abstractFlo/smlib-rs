@@ -8,6 +8,20 @@ NVIDIA's its SMLib is based on.
 
 ## [Unreleased]
 
+### Changed
+
+- SMLib and SM_API are those of NVIDIA usd-brep 1.0.2 (was 1.0.1), with its fixes: booleans of
+  crossing cylinders, of cones and of nearly parallel curves that failed or gave invalid solids,
+  transforms that set a torus's tolerances to 0, fillet rails that left their start in the wrong
+  direction, `create_cylindrical_box` over a full turn, and native files that crashed the reader
+  (they now fail with `SM_ERR_INVALID_INPUT`). Results can change: a boolean turns a cylinder, cone
+  or other solid of revolution about its axis so that its seams clear the points where it touches
+  the other body (the same shape, its faces split elsewhere); booleans of bodies under about 5
+  units across merge intersection points less than 0.01 apart; `Brep::is_manifold_solid` is false
+  for a body without a solid region; and `create_box`, `Brep::copy`, `Brep::shell`, `Brep::offset`
+  (with self-intersection on) and `Edge::length` fail where they returned an incomplete or wrong
+  result.
+
 ## [0.1.3] - 2026-11-23
 
 Based on NVIDIA usd-brep 1.0.1.
