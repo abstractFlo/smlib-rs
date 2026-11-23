@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /******************************************************************//**
 * FILE NAME --- SmBSplineSurface.h
@@ -1406,6 +1407,15 @@ public:
       SmSurface      *& rpNewSurface,       // out: NULL on input = new object allocated in this routine built from stream data    
                                             //    : NotNULL on input = pointer to an empty object to be filled by this routine     
       ULONG             lDBVersionNumber    // in : database version to get proper sequence of writes                              
+    );
+
+    // Takes over pNurb, allocated and clamped, with its knots as they are (no sm_FixupKnotVector),
+    // as ReadFromDB builds a surface; for a surface that owns no NURB yet.
+    void TakeOverNurb
+    (
+      gw_SURFACE           * pNurb,              // in : allocated with sm_AllocateNurbSurface, owned by this surface afterwards
+      SmKnotType             eKnotType,          // in :
+      SmBSplineSurfaceForm   eBSplineSurfaceForm // in :
     );
 
     // output surface Polygons through SmPolygonOutputCallback.OutputPolygon call

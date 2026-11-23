@@ -21,6 +21,12 @@
 #include <SmAxis2Placement.h>
 #include <SmThreadLocalStorage.h>
 #include <nurbs.h>
+#include <NL_CrvBasic.h>
+#include <NL_Math.h>
+#include <NL_SrfBasic.h>
+#include <SmClampNurbs.h>
+#include <SmNurbsCrv.h>
+#include <SmNurbsSrf.h>
 
 #if defined(_UNICODE) && defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -2047,6 +2053,300 @@ int cs_brep_read_file(const char* path, int ascii, int rebuildUvTrims, CsBrep** 
     *result = reinterpret_cast<CsBrep*>(brep);
     return 0;
     CS_CATCH("SmApiReadBrepFromFile")
+}
+
+} // extern "C"
+
+namespace
+{
+
+// Rows of `width` values each, read from an array the caller sized.
+template <typename Value>
+struct RowsOf
+{
+    const Value* values;
+    size_t count;
+    size_t width;
+
+    Value at(size_t row, size_t column) const { return values[row * width + column]; }
+};
+
+template <typename Value, typename Array>
+bool rowsOf(const Array& array, size_t width, RowsOf<Value>& rows)
+{
+    if (array.length % width != 0 || (array.length > 0 && array.values == nullptr))
+        return false;
+    rows = {array.values, array.length / width, width};
+    return true;
+}
+
+bool below(uint64_t index, size_t count) { return index < count; }
+
+// a radial edge-use link as the file writes it: an edge-use's index, or -(index + 1)
+bool radialLink(int64_t link, size_t count)
+{
+    return link >= 0 ? below(static_cast<uint64_t>(link), count) : below(static_cast<uint64_t>(-(link + 1)), count);
+}
+
+const char* const kRowsEntry = "cs_brep_from_rows";
+
+} // namespace
+
+extern "C" {
+
+int cs_brep_from_rows(const CsBrepRows* rows, CsBrep** result)
+{
+    CS_TRY
+    *result = nullptr;
+    RowsOf<uint32_t> regions{}, shells{}, faceuses{}, faces{}, loops{}, edges{}, curves{}, surfaces{};
+    RowsOf<int64_t> edgeuses{};
+    RowsOf<double> faceValues{}, edgeValues{}, vertices{}, curvePoints{}, curveKnots{}, surfacePoints{}, surfaceKnots{};
+    if (!rowsOf(rows->regions, 3, regions) || !rowsOf(rows->shells, 2, shells) || !rowsOf(rows->faceuses, 2, faceuses)
+        || !rowsOf(rows->faces, 4, faces) || !rowsOf(rows->face_values, 5, faceValues) || !rowsOf(rows->loops, 3, loops)
+        || !rowsOf(rows->edgeuses, 5, edgeuses) || !rowsOf(rows->edges, 4, edges) || !rowsOf(rows->edge_values, 3, edgeValues)
+        || !rowsOf(rows->vertices, 4, vertices) || !rowsOf(rows->curves, 2, curves) || !rowsOf(rows->curve_points, 4, curvePoints)
+        || !rowsOf(rows->curve_knots, 1, curveKnots) || !rowsOf(rows->surfaces, 4, surfaces)
+        || !rowsOf(rows->surface_points, 4, surfacePoints) || !rowsOf(rows->surface_knots, 1, surfaceKnots))
+        return failWith(kRowsEntry, "an array does not hold whole rows");
+    if (regions.count == 0 || faceValues.count != faces.count || edgeValues.count != edges.count)
+        return failWith(kRowsEntry, "no outside region, or faces or edges without their values");
+    for (size_t row = 0; row < regions.count; ++row)
+        if (regions.at(row, 0) > 0 && !below(uint64_t(regions.at(row, 1)) + regions.at(row, 0) - 1, shells.count))
+            return failWith(kRowsEntry, "a region's shells lie past the shells");
+    for (size_t row = 0; row < shells.count; ++row)
+        if (shells.at(row, 0) > 0 && !below(uint64_t(shells.at(row, 1)) + shells.at(row, 0) - 1, faceuses.count))
+            return failWith(kRowsEntry, "a shell's face-uses lie past the face-uses");
+    for (size_t row = 0; row < faceuses.count; ++row)
+        if (!below(faceuses.at(row, 0), faces.count))
+            return failWith(kRowsEntry, "a face-use names no face");
+    for (size_t row = 0; row < faces.count; ++row)
+        if (!below(faces.at(row, 0), surfaces.count) || (faces.at(row, 2) > 0 && !below(uint64_t(faces.at(row, 1)) + faces.at(row, 2) - 1, loops.count)))
+            return failWith(kRowsEntry, "a face names no surface, or its loops lie past the loops");
+    for (size_t row = 0; row < loops.count; ++row)
+    {
+        const uint32_t kind = loops.at(row, 0);
+        if (kind == 0 ? loops.at(row, 1) > 0 && !below(uint64_t(loops.at(row, 2)) + loops.at(row, 1) - 1, edgeuses.count)
+                      : kind != 1 || !below(loops.at(row, 1), vertices.count))
+            return failWith(kRowsEntry, "a loop is neither of edge-uses nor of a vertex it names");
+    }
+    for (size_t row = 0; row < edgeuses.count; ++row)
+        if (edgeuses.at(row, 0) < 0 || !below(uint64_t(edgeuses.at(row, 0)), edges.count) || edgeuses.at(row, 1) < 0
+            || !below(uint64_t(edgeuses.at(row, 1)), loops.count) || !radialLink(edgeuses.at(row, 3), edgeuses.count)
+            || !radialLink(edgeuses.at(row, 4), edgeuses.count))
+            return failWith(kRowsEntry, "an edge-use names no edge, loop or radial edge-use");
+    for (size_t row = 0; row < edges.count; ++row)
+        if (!below(edges.at(row, 0), curves.count) || !below(edges.at(row, 1), vertices.count) || !below(edges.at(row, 2), vertices.count)
+            || !below(edges.at(row, 3), edgeuses.count))
+            return failWith(kRowsEntry, "an edge names no curve, vertex or edge-use");
+    uint64_t pointsNeeded = 0, knotsNeeded = 0;
+    for (size_t row = 0; row < curves.count; ++row)
+    {
+        const uint32_t degree = curves.at(row, 0), count = curves.at(row, 1);
+        if (degree < 1 || degree > NL_MAXDEG || count < degree + 1)
+            return failWith(kRowsEntry, "a curve's degree is out of range or it has too few control points");
+        pointsNeeded += count;
+        knotsNeeded += uint64_t(count) + degree + 1;
+    }
+    if (pointsNeeded != curvePoints.count || knotsNeeded != curveKnots.count)
+        return failWith(kRowsEntry, "the curves' control points or knots do not add up");
+    pointsNeeded = knotsNeeded = 0;
+    for (size_t row = 0; row < surfaces.count; ++row)
+    {
+        const uint32_t degreeU = surfaces.at(row, 0), degreeV = surfaces.at(row, 1), countU = surfaces.at(row, 2), countV = surfaces.at(row, 3);
+        if (degreeU < 1 || degreeU > NL_MAXDEG || degreeV < 1 || degreeV > NL_MAXDEG || countU < degreeU + 1 || countV < degreeV + 1)
+            return failWith(kRowsEntry, "a surface's degree is out of range or it has too few control points");
+        pointsNeeded += uint64_t(countU) * countV;
+        knotsNeeded += uint64_t(countU) + degreeU + 1 + countV + degreeV + 1;
+    }
+    if (pointsNeeded != surfacePoints.count || knotsNeeded != surfaceKnots.count)
+        return failWith(kRowsEntry, "the surfaces' control points or knots do not add up");
+
+    // as SmBrepData::ReadFromDB fills it from a file of SM_CURRENT_DATABASE_VERSION
+    SmContext* context = SmApiGetOrCreateContext();
+    SmBrepData* data = new (*context) SmBrepData(TRUE, SM_DS_SMLIB);
+    SmObjDelete cleanData(data);
+    data->m_vColor = {1.0, 0.0, 0.0};
+    data->m_sZoneTol3d = rows->tolerance;
+    data->m_bManifold = TRUE;
+    data->m_lStartRegion = 0;
+    data->m_lNumRegions = static_cast<ULONG>(regions.count);
+    data->SetHealerVersion(SM_HEALER_VERSION);
+    const auto clearIds = [](SmTopologyData& topology) {
+        topology.m_lFlags = 0;
+        topology.m_lUserIndex1 = 0;
+        topology.m_lUserIndex2 = 0;
+    };
+    data->m_vRegions.SetSize(static_cast<ULONG>(regions.count));
+    for (size_t row = 0; row < regions.count; ++row)
+    {
+        SmRegionData& region = data->m_vRegions[static_cast<ULONG>(row)];
+        clearIds(region);
+        region.m_lNumShells = regions.at(row, 0);
+        region.m_lStartShell = regions.at(row, 1);
+        region.m_bIsVoidFlag = regions.at(row, 2) != 0 ? TRUE : FALSE;
+    }
+    data->m_vShells.SetSize(static_cast<ULONG>(shells.count));
+    for (size_t row = 0; row < shells.count; ++row)
+    {
+        SmShellData& shell = data->m_vShells[static_cast<ULONG>(row)];
+        clearIds(shell);
+        shell.m_lShellType = 0;
+        shell.m_lNumFaceuses = shells.at(row, 0);
+        shell.m_lFaceuseStart = shells.at(row, 1);
+    }
+    data->m_vFaceuses.SetSize(static_cast<ULONG>(faceuses.count));
+    for (size_t row = 0; row < faceuses.count; ++row)
+    {
+        SmFaceuseData& faceuse = data->m_vFaceuses[static_cast<ULONG>(row)];
+        clearIds(faceuse);
+        faceuse.m_lFace = faceuses.at(row, 0);
+        faceuse.m_bOrientation = faceuses.at(row, 1) != 0 ? TRUE : FALSE;
+    }
+    data->m_vFaces.SetSize(static_cast<ULONG>(faces.count));
+    for (size_t row = 0; row < faces.count; ++row)
+    {
+        SmFaceData& face = data->m_vFaces[static_cast<ULONG>(row)];
+        clearIds(face);
+        face.m_sZoneTol3d = faceValues.at(row, 0);
+        face.m_lSurface = faces.at(row, 0);
+        face.m_lStartLoop = faces.at(row, 1);
+        face.m_lNumLoops = faces.at(row, 2);
+        face.m_bRectangularTrim = static_cast<SmBoolean>(faces.at(row, 3));
+        face.m_vUVDomain.SetMinMax(SmPoint2d(faceValues.at(row, 1), faceValues.at(row, 3)), SmPoint2d(faceValues.at(row, 2), faceValues.at(row, 4)));
+    }
+    data->m_vLoops.SetSize(static_cast<ULONG>(loops.count));
+    for (size_t row = 0; row < loops.count; ++row)
+    {
+        SmLoopData& loop = data->m_vLoops[static_cast<ULONG>(row)];
+        clearIds(loop);
+        loop.m_lLoopType = loops.at(row, 0);
+        if (loop.m_lLoopType == 0)
+        {
+            loop.m_lNumEU = loops.at(row, 1);
+            loop.m_lStartEU = loops.at(row, 2);
+        }
+        else
+            loop.m_lVertex = loops.at(row, 1);
+    }
+    data->m_vEdgeuses.SetSize(static_cast<ULONG>(edgeuses.count));
+    for (size_t row = 0; row < edgeuses.count; ++row)
+    {
+        SmEUData& edgeuse = data->m_vEdgeuses[static_cast<ULONG>(row)];
+        clearIds(edgeuse);
+        edgeuse.m_lMateFlags = 0;
+        edgeuse.m_lMateUserIndex1 = 0;
+        edgeuse.m_lMateUserIndex2 = 0;
+        edgeuse.m_lEUType = 0;
+        edgeuse.m_lEdge = static_cast<ULONG>(edgeuses.at(row, 0));
+        edgeuse.m_lLoop = static_cast<ULONG>(edgeuses.at(row, 1));
+        edgeuse.m_bOrientation = edgeuses.at(row, 2) != 0 ? TRUE : FALSE;
+        edgeuse.m_lUVCurve = 9999999; // none: MakeTopologyFromData takes only indices below 999999
+        edgeuse.m_lNextEU = static_cast<long>(edgeuses.at(row, 3));
+        edgeuse.m_lMateNextEU = static_cast<long>(edgeuses.at(row, 4));
+    }
+    data->m_vEdges.SetSize(static_cast<ULONG>(edges.count));
+    for (size_t row = 0; row < edges.count; ++row)
+    {
+        SmEdgeData& edge = data->m_vEdges[static_cast<ULONG>(row)];
+        clearIds(edge);
+        edge.m_sZoneTol3d = edgeValues.at(row, 0);
+        edge.m_lCurve = edges.at(row, 0);
+        edge.m_lStartVertex = edges.at(row, 1);
+        edge.m_lEndVertex = edges.at(row, 2);
+        edge.m_lPrimEU = static_cast<long>(edges.at(row, 3));
+        edge.m_vInterval.SetMinMax(edgeValues.at(row, 1), edgeValues.at(row, 2));
+    }
+    data->m_vVertices.SetSize(static_cast<ULONG>(vertices.count));
+    for (size_t row = 0; row < vertices.count; ++row)
+    {
+        SmVertexData& vertex = data->m_vVertices[static_cast<ULONG>(row)];
+        clearIds(vertex);
+        vertex.m_sZoneTol3d = vertices.at(row, 0);
+        vertex.m_vPoint = SmPoint3d(vertices.at(row, 1), vertices.at(row, 2), vertices.at(row, 3));
+    }
+    // geometry as SmBSplineCurve::ReadFromDB and SmBSplineSurface::ReadFromDB build it: rational,
+    // the control points weighted, clamped, the knots as given
+    data->m_v3DCurves.SetSize(static_cast<ULONG>(curves.count));
+    for (size_t row = 0; row < curves.count; ++row)
+        data->m_v3DCurves[static_cast<ULONG>(row)] = nullptr;
+    size_t point = 0, knot = 0;
+    for (size_t row = 0; row < curves.count; ++row)
+    {
+        const gw_DEGREE degree = static_cast<gw_DEGREE>(curves.at(row, 0));
+        const gw_INDEX highest = static_cast<gw_INDEX>(curves.at(row, 1)) - 1;
+        const gw_INDEX highestKnot = highest + degree + 1;
+        gw_CURVE* nurb = sm_AllocateNurbCurve(highest, degree, highestKnot);
+        if (nurb == nullptr)
+            return failWith(kRowsEntry, "no memory for a curve");
+        SmMemDelete cleanNurb(nurb);
+        gw_CPOINT* controls = nullptr;
+        gw_REAL* knots = nullptr;
+        N_CrvGetCPtsAndKnots(nurb, &controls, &knots);
+        for (gw_INDEX index = 0; index <= highest; ++index, ++point)
+        {
+            const double weight = curvePoints.at(point, 3);
+            N_CPtFromWxWyWz(curvePoints.at(point, 0) * weight, curvePoints.at(point, 1) * weight, curvePoints.at(point, 2) * weight, weight, &controls[index]);
+        }
+        for (gw_INDEX index = 0; index <= highestKnot; ++index, ++knot)
+            knots[index] = curveKnots.at(knot, 0);
+        sm_ClampNurbCurve(nurb);
+        SmBSplineCurve* curve = new (*context) SmBSplineCurve(3);
+        cleanNurb.Clear();
+        curve->TakeOverNurb(nurb, 3, SM_KT_UNSPECIFIED, SM_CF_UNSPECIFIED);
+        data->m_v3DCurves[static_cast<ULONG>(row)] = curve;
+    }
+    data->m_vSurfaces.SetSize(static_cast<ULONG>(surfaces.count));
+    for (size_t row = 0; row < surfaces.count; ++row)
+        data->m_vSurfaces[static_cast<ULONG>(row)] = nullptr;
+    point = knot = 0;
+    for (size_t row = 0; row < surfaces.count; ++row)
+    {
+        const gw_DEGREE degreeU = static_cast<gw_DEGREE>(surfaces.at(row, 0)), degreeV = static_cast<gw_DEGREE>(surfaces.at(row, 1));
+        const gw_INDEX highestU = static_cast<gw_INDEX>(surfaces.at(row, 2)) - 1, highestV = static_cast<gw_INDEX>(surfaces.at(row, 3)) - 1;
+        const gw_INDEX highestKnotU = highestU + degreeU + 1, highestKnotV = highestV + degreeV + 1;
+        gw_SURFACE* nurb = sm_AllocateNurbSurface(highestU, highestV, degreeU, degreeV, highestKnotU, highestKnotV);
+        if (nurb == nullptr)
+            return failWith(kRowsEntry, "no memory for a surface");
+        SmMemDelete cleanNurb(nurb);
+        gw_CPOINT** controls = nullptr;
+        gw_REAL* knotsU = nullptr;
+        gw_REAL* knotsV = nullptr;
+        N_SrfGetCPtsAndKnots(nurb, &controls, &knotsU, &knotsV);
+        for (gw_INDEX indexU = 0; indexU <= highestU; ++indexU)
+            for (gw_INDEX indexV = 0; indexV <= highestV; ++indexV, ++point)
+            {
+                const double weight = surfacePoints.at(point, 3);
+                N_CPtFromWxWyWz(surfacePoints.at(point, 0) * weight, surfacePoints.at(point, 1) * weight, surfacePoints.at(point, 2) * weight, weight, &controls[indexU][indexV]);
+            }
+        for (gw_INDEX index = 0; index <= highestKnotU; ++index, ++knot)
+            knotsU[index] = surfaceKnots.at(knot, 0);
+        for (gw_INDEX index = 0; index <= highestKnotV; ++index, ++knot)
+            knotsV[index] = surfaceKnots.at(knot, 0);
+        sm_ClampNurbSurface(nurb);
+        SmBSplineSurface* surface = new (*context) SmBSplineSurface();
+        cleanNurb.Clear();
+        surface->TakeOverNurb(nurb, SM_KT_UNSPECIFIED, SM_SF_UNSPECIFIED);
+        data->m_vSurfaces[static_cast<ULONG>(row)] = surface;
+    }
+
+    // as SmBrep::ReadFromFile builds the body from the data, its UV trim curves rebuilt
+    SmBrep* brep = new (*context) SmBrep();
+    SmObjDelete cleanBrep(brep);
+    SmTArray<SmAttribute*> attributes;
+    clearTrail();
+    const SmStatus made = brep->MakeTopologyFromData(data, attributes, FALSE, TRUE, TRUE);
+    if (made != SM_SUCCESS)
+    {
+        SmObjsDelete<SmAttribute*> cleanAttributes(&attributes);
+        return fail("SmBrep::MakeTopologyFromData", made);
+    }
+    cleanData.Clear();
+    delete data;
+    CS_CHECK("SmBrep::RebuildUVTrimCurves", brep->RebuildUVTrimCurves());
+    cleanBrep.Clear();
+    *result = reinterpret_cast<CsBrep*>(brep);
+    return 0;
+    CS_CATCH(kRowsEntry)
 }
 
 int cs_stitch_into_solid(CsBrep* value, int* solid)

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Modified in smlib-rs, not part of an NVIDIA release: the changes are in this repository's git history.
 
 /******************************************************************//**
 * FILE NAME --- SmBSplineCurve.h
@@ -924,6 +925,13 @@ public:
                               SmCurve         *& rpNewCurve,          ///< [out]: NULL on input = new object allocated in this routine built from stream data<br>
                                                                       ///<      : NotNULL on input = pointer to an empty object to be filled by this routine <br>
                               ULONG              lDBVersionNumber) ; ///< [in] : database version to get proper sequence of writes                          <br>
+
+  // Takes over pNurb, allocated and clamped, with its knots as they are (no sm_FixupKnotVector),
+  // as ReadFromDB builds a curve; for a curve that owns no NURB yet.
+  void TakeOverNurb(gw_CURVE         * pNurb,               ///< [in] : allocated with sm_AllocateNurbCurve, owned by this curve afterwards <br>
+                    ULONG              lDim,                ///< [in] : image space dimension of pNurb, 2 or 3                             <br>
+                    SmKnotType         eKnotType,           ///< [in] :                                                                    <br>
+                    SmBSplineCurveForm eBSplineCurveForm) ; ///< [in] :                                                                    <br>
   
   // Define  GetType(), IsKindOf(), and virtual Dump() (Dump needs local implementation)
   SM_COMMON(SmBSplineCurve,SmCurve,SmBSplineCurve_TYPE) ;

@@ -176,6 +176,34 @@ int cs_brep_exact(const CsBrep* brep, char** text, size_t* length);
 void cs_text_free(char* text);
 /* SMLib's native .smb files (ASCII or binary); reading can rebuild the UV trim curves */
 int cs_brep_read_file(const char* path, int ascii, int rebuildUvTrims, CsBrep** result);
+/* A body handed over in memory as the rows of SMLib's own B-rep data (what a native .smb file
+   holds): SmBrepData is filled row by row and built as SmBrep::ReadFromFile builds it, its UV trim
+   curves rebuilt from the 3D edges. Each array holds whole rows of the width its comment gives;
+   indices point into the other arrays as in the file. */
+typedef struct CsU32s { const uint32_t* values; size_t length; } CsU32s;
+typedef struct CsI64s { const int64_t* values; size_t length; } CsI64s;
+typedef struct CsF64s { const double* values; size_t length; } CsF64s;
+typedef struct CsBrepRows
+{
+    double tolerance;      /* the body's zone tolerance */
+    CsU32s regions;        /* 3 a row: shell count, first shell, void (0 or 1); row 0 is the outside */
+    CsU32s shells;         /* 2 a row: face-use count, first face-use */
+    CsU32s faceuses;       /* 2 a row: face, orientation (1: along its surface's normal) */
+    CsU32s faces;          /* 4 a row: surface, first loop, loop count, rectangular trim (0, 1, 2 unsure) */
+    CsF64s face_values;    /* 5 a face: tolerance, u min, u max, v min, v max */
+    CsU32s loops;          /* 3 a row: 0, edge-use count, first edge-use; or 1, vertex, 0 */
+    CsI64s edgeuses;       /* 5 a row: edge, loop, along the edge (0 or 1), next radial edge-use, its mate's next */
+    CsU32s edges;          /* 4 a row: 3D curve, start vertex, end vertex, primary edge-use */
+    CsF64s edge_values;    /* 3 an edge: tolerance, parameter min, parameter max */
+    CsF64s vertices;       /* 4 a row: tolerance, x, y, z */
+    CsU32s curves;         /* 2 a row: degree, control point count */
+    CsF64s curve_points;   /* 4 a control point (x, y, z, weight), curve after curve */
+    CsF64s curve_knots;    /* control point count + degree + 1 a curve, curve after curve */
+    CsU32s surfaces;       /* 4 a row: degree in u, degree in v, control points in u, in v */
+    CsF64s surface_points; /* 4 a control point (x, y, z, weight), v running fastest, surface after surface */
+    CsF64s surface_knots;  /* the u knots, then the v knots, surface after surface */
+} CsBrepRows;
+int cs_brep_from_rows(const CsBrepRows* rows, CsBrep** result);
 int cs_heal_brep(CsBrep* brep);
 int cs_stitch_into_solid(CsBrep* brep, int* solid);
 /* a sliver face pulled into a point, its neighbours meeting there (smlib-rs) */

@@ -8,6 +8,16 @@ NVIDIA's its SMLib is based on.
 
 ## [Unreleased]
 
+### Added
+
+- `Brep::from_rows` builds a body from `BrepRows`, the rows of SMLib's own B-rep data (regions,
+  shells, face-uses, faces, loops, edge-uses, edges, vertices, b-spline curves and surfaces), in
+  memory: the same body that writing them to a native file and reading it back with
+  `Brep::read_from_file_rebuilding(path, true, true)` gives, without the file or its parsing. Rows
+  that point past the others are refused with an error. In C: `cs_brep_from_rows`; in SMLib,
+  `SmBSplineCurve::TakeOverNurb` and `SmBSplineSurface::TakeOverNurb` take over a NURB as the file
+  readers build one, its knots as given.
+
 ## [0.1.2] - 2026-11-16
 
 Based on NVIDIA usd-brep 1.0.1.

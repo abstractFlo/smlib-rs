@@ -40,6 +40,46 @@ pub struct CsLines {
     _private: [u8; 0],
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CsU32s {
+    pub values: *const u32,
+    pub length: usize,
+}
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CsI64s {
+    pub values: *const i64,
+    pub length: usize,
+}
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CsF64s {
+    pub values: *const f64,
+    pub length: usize,
+}
+/// A body's rows of SMLib's own B-rep data; the widths are in shim.h.
+#[repr(C)]
+pub struct CsBrepRows {
+    pub tolerance: f64,
+    pub regions: CsU32s,
+    pub shells: CsU32s,
+    pub faceuses: CsU32s,
+    pub faces: CsU32s,
+    pub face_values: CsF64s,
+    pub loops: CsU32s,
+    pub edgeuses: CsI64s,
+    pub edges: CsU32s,
+    pub edge_values: CsF64s,
+    pub vertices: CsF64s,
+    pub curves: CsU32s,
+    pub curve_points: CsF64s,
+    pub curve_knots: CsF64s,
+    pub surfaces: CsU32s,
+    pub surface_points: CsF64s,
+    pub surface_knots: CsF64s,
+}
+
 extern "C" {
     pub fn cs_thread_start();
     pub fn cs_thread_end();
@@ -222,6 +262,7 @@ extern "C" {
     pub fn cs_brep_exact(brep: *const CsBrep, text: *mut *mut c_char, length: *mut usize) -> c_int;
     pub fn cs_text_free(text: *mut c_char);
     pub fn cs_brep_read_file(path: *const c_char, ascii: c_int, rebuild_uv_trims: c_int, result: *mut *mut CsBrep) -> c_int;
+    pub fn cs_brep_from_rows(rows: *const CsBrepRows, result: *mut *mut CsBrep) -> c_int;
     pub fn cs_heal_brep(brep: *mut CsBrep) -> c_int;
     pub fn cs_stitch_into_solid(brep: *mut CsBrep, solid: *mut c_int) -> c_int;
     pub fn cs_squeeze_face(brep: *mut CsBrep, face: *mut CsFace, tolerance: f64) -> c_int;

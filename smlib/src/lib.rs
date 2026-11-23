@@ -303,6 +303,16 @@ impl Brep {
         made(unsafe { ffi::cs_brep_read_file(path.as_ptr(), ascii as c_int, rebuild_uv_trims as c_int, &mut raw) }, raw)
     }
 
+    /// The body the rows describe, built as reading them from a native SMLib file builds it (its
+    /// UV trim curves rebuilt from the 3D edges), without writing or parsing a file.
+    pub fn from_rows(rows: &BrepRows) -> Result<Brep> {
+        let flat = FlatRows::of(rows);
+        let raw_rows = flat.raw(rows.tolerance);
+        let mut raw = ptr::null_mut();
+        // SAFETY: every array of raw_rows points into `flat`, alive for the call, with its own length
+        made(unsafe { ffi::cs_brep_from_rows(&raw_rows, &mut raw) }, raw)
+    }
+
     /// SMLib's healer over the body (closing small gaps, fixing tolerances).
     pub fn heal(&mut self) -> Result<()> {
         check(unsafe { ffi::cs_heal_brep(self.mut_ptr()) })
@@ -1134,6 +1144,203 @@ pub struct CircleFrame {
     pub normal: Vector,
     pub x_axis: Vector,
     pub radius: f64,
+}
+
+/// A body as the rows of SMLib's own B-rep data, what a native SMLib file holds: regions, shells,
+/// face-uses, faces, loops, edge-uses, edges, vertices, 3D curves and surfaces, each pointing into
+/// the others by index as in the file ([`Brep::from_rows`]).
+#[derive(Debug, Clone, Default)]
+pub struct BrepRows {
+    /// the body's zone tolerance
+    pub tolerance: f64,
+    /// region 0 is the outside
+    pub regions: Vec<RegionRow>,
+    pub shells: Vec<ShellRow>,
+    pub faceuses: Vec<FaceuseRow>,
+    pub faces: Vec<FaceRow>,
+    pub loops: Vec<LoopRow>,
+    pub edgeuses: Vec<EdgeuseRow>,
+    pub edges: Vec<EdgeRow>,
+    pub vertices: Vec<VertexRow>,
+    /// the edges' 3D curves, rational b-splines
+    pub curves: Vec<Nurbs>,
+    /// the faces' surfaces, rational b-splines
+    pub surfaces: Vec<NurbsSurface>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RegionRow {
+    pub shell_count: u32,
+    pub first_shell: u32,
+    pub is_void: bool,
+}
+
+/// A shell of face-uses.
+#[derive(Debug, Clone, Copy)]
+pub struct ShellRow {
+    pub faceuse_count: u32,
+    pub first_faceuse: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FaceuseRow {
+    pub face: u32,
+    /// the face-use looks along its surface's normal
+    pub along_normal: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FaceRow {
+    pub surface: u32,
+    pub first_loop: u32,
+    pub loop_count: u32,
+    pub tolerance: f64,
+    pub u_range: (f64, f64),
+    pub v_range: (f64, f64),
+    /// whether the face is trimmed by its uv rectangle only; None: not known
+    pub rectangular_trim: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum LoopRow {
+    Edgeuses { count: u32, first: u32 },
+    /// a loop of one vertex (a cone's apex, a sphere's pole)
+    Vertex(u32),
+}
+
+/// An edge-use in its loop, with its places in the radial list of edge-uses around its edge:
+/// the index of the next edge-use, or `-(index + 1)` (what a native SMLib file writes).
+#[derive(Debug, Clone, Copy)]
+pub struct EdgeuseRow {
+    pub edge: u32,
+    pub in_loop: u32,
+    pub along_edge: bool,
+    pub next_radial: i64,
+    pub mate_next_radial: i64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct EdgeRow {
+    pub curve: u32,
+    pub start: u32,
+    pub end: u32,
+    pub primary_edgeuse: u32,
+    pub tolerance: f64,
+    pub interval: (f64, f64),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VertexRow {
+    pub point: Point,
+    pub tolerance: f64,
+}
+
+/// A b-spline surface's control points (x, y, z, weight), row after row in u with v running
+/// fastest, its knots in u and v and its degrees.
+#[derive(Debug, Clone)]
+pub struct NurbsSurface {
+    pub points: Vec<[f64; 4]>,
+    pub count_u: u32,
+    pub count_v: u32,
+    pub knots_u: Vec<f64>,
+    pub knots_v: Vec<f64>,
+    pub degree_u: u32,
+    pub degree_v: u32,
+}
+
+/// The rows as the flat arrays of the C interface (widths in shim.h).
+#[derive(Default)]
+struct FlatRows {
+    regions: Vec<u32>,
+    shells: Vec<u32>,
+    faceuses: Vec<u32>,
+    faces: Vec<u32>,
+    face_values: Vec<f64>,
+    loops: Vec<u32>,
+    edgeuses: Vec<i64>,
+    edges: Vec<u32>,
+    edge_values: Vec<f64>,
+    vertices: Vec<f64>,
+    curves: Vec<u32>,
+    curve_points: Vec<f64>,
+    curve_knots: Vec<f64>,
+    surfaces: Vec<u32>,
+    surface_points: Vec<f64>,
+    surface_knots: Vec<f64>,
+}
+
+impl FlatRows {
+    fn of(rows: &BrepRows) -> FlatRows {
+        let mut flat = FlatRows::default();
+        for region in &rows.regions {
+            flat.regions.extend([region.shell_count, region.first_shell, region.is_void as u32]);
+        }
+        for shell in &rows.shells {
+            flat.shells.extend([shell.faceuse_count, shell.first_faceuse]);
+        }
+        for faceuse in &rows.faceuses {
+            flat.faceuses.extend([faceuse.face, faceuse.along_normal as u32]);
+        }
+        for face in &rows.faces {
+            let rectangular = match face.rectangular_trim {
+                Some(trimmed) => trimmed as u32,
+                None => 2,
+            };
+            flat.faces.extend([face.surface, face.first_loop, face.loop_count, rectangular]);
+            flat.face_values.extend([face.tolerance, face.u_range.0, face.u_range.1, face.v_range.0, face.v_range.1]);
+        }
+        for loop_row in &rows.loops {
+            flat.loops.extend(match *loop_row {
+                LoopRow::Edgeuses { count, first } => [0, count, first],
+                LoopRow::Vertex(vertex) => [1, vertex, 0],
+            });
+        }
+        for edgeuse in &rows.edgeuses {
+            flat.edgeuses.extend([edgeuse.edge as i64, edgeuse.in_loop as i64, edgeuse.along_edge as i64, edgeuse.next_radial, edgeuse.mate_next_radial]);
+        }
+        for edge in &rows.edges {
+            flat.edges.extend([edge.curve, edge.start, edge.end, edge.primary_edgeuse]);
+            flat.edge_values.extend([edge.tolerance, edge.interval.0, edge.interval.1]);
+        }
+        for vertex in &rows.vertices {
+            flat.vertices.extend([vertex.tolerance, vertex.point[0], vertex.point[1], vertex.point[2]]);
+        }
+        for curve in &rows.curves {
+            flat.curves.extend([curve.degree, curve.points.len() as u32]);
+            flat.curve_points.extend(curve.points.iter().flatten());
+            flat.curve_knots.extend(&curve.knots);
+        }
+        for surface in &rows.surfaces {
+            flat.surfaces.extend([surface.degree_u, surface.degree_v, surface.count_u, surface.count_v]);
+            flat.surface_points.extend(surface.points.iter().flatten());
+            flat.surface_knots.extend(surface.knots_u.iter().chain(&surface.knots_v));
+        }
+        flat
+    }
+
+    fn raw(&self, tolerance: f64) -> ffi::CsBrepRows {
+        let u32s = |values: &Vec<u32>| ffi::CsU32s { values: values.as_ptr(), length: values.len() };
+        let f64s = |values: &Vec<f64>| ffi::CsF64s { values: values.as_ptr(), length: values.len() };
+        ffi::CsBrepRows {
+            tolerance,
+            regions: u32s(&self.regions),
+            shells: u32s(&self.shells),
+            faceuses: u32s(&self.faceuses),
+            faces: u32s(&self.faces),
+            face_values: f64s(&self.face_values),
+            loops: u32s(&self.loops),
+            edgeuses: ffi::CsI64s { values: self.edgeuses.as_ptr(), length: self.edgeuses.len() },
+            edges: u32s(&self.edges),
+            edge_values: f64s(&self.edge_values),
+            vertices: f64s(&self.vertices),
+            curves: u32s(&self.curves),
+            curve_points: f64s(&self.curve_points),
+            curve_knots: f64s(&self.curve_knots),
+            surfaces: u32s(&self.surfaces),
+            surface_points: f64s(&self.surface_points),
+            surface_knots: f64s(&self.surface_knots),
+        }
+    }
 }
 
 /// A b-spline's control points (x, y, z, weight), all its knots and its degree.

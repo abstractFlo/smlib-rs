@@ -7459,12 +7459,7 @@ SmStatus SmBSplineCurve::ReadFromDB
   if (pBSplineCurve == NULL)
     { pBSplineCurve = new (crContext) SmBSplineCurve(lDim) ; }
   sNurbCleanup.Clear() ;
-  pBSplineCurve->m_pNurb               = cur ;
-  pBSplineCurve->m_bNurbIsBorrowed     = FALSE ;
-  pBSplineCurve->m_bOutOfBoundsEnabled = FALSE ;
-  pBSplineCurve->m_eKnotType           = (SmKnotType        ) lKnotType ;
-  pBSplineCurve->m_eBSplineCurveForm   = (SmBSplineCurveForm) lBSplineCurveForm ;
-  pBSplineCurve->m_lDim                = (ULONG)lReadDim ;
+  pBSplineCurve->TakeOverNurb(cur, (ULONG)lReadDim, (SmKnotType)lKnotType, (SmBSplineCurveForm)lBSplineCurveForm) ;
 
   // fix 2d curve representations
   if (lDim == 2 && lReadDim == 3) 
@@ -7481,6 +7476,27 @@ SmStatus SmBSplineCurve::ReadFromDB
   return(SM_SUCCESS) ; 
 
 } // end SmBSplineCurve::ReadFromDB
+
+/*******************************************************************//**
+PURPOSE: Take over an allocated, clamped NURB with its knots as they are,
+    as ReadFromDB builds a curve.
+
+NOTES: For a curve that owns no NURB yet; the curve frees pNurb.
+***********************************************************************/
+void SmBSplineCurve::TakeOverNurb
+ (gw_CURVE         * pNurb,             // in : allocated with sm_AllocateNurbCurve, owned by this curve afterwards
+  ULONG              lDim,              // in : image space dimension of pNurb, 2 or 3
+  SmKnotType         eKnotType,         // in :
+  SmBSplineCurveForm eBSplineCurveForm) // in :
+{
+  SM_ASSERT(m_pNurb == NULL) ;
+  m_pNurb               = pNurb ;
+  m_bNurbIsBorrowed     = FALSE ;
+  m_bOutOfBoundsEnabled = FALSE ;
+  m_eKnotType           = eKnotType ;
+  m_eBSplineCurveForm   = eBSplineCurveForm ;
+  m_lDim                = lDim ;
+} // end SmBSplineCurve::TakeOverNurb
 
 /*******************************************************************//**
 PURPOSE:

@@ -6583,11 +6583,7 @@ SmStatus SmBSplineSurface::ReadFromDB
   if (pBSplineSurface == NULL)
     { pBSplineSurface = new (crContext) SmBSplineSurface() ; }
   sNurbCleanup.Clear() ;
-  pBSplineSurface->m_pNurb               = sur ;
-  pBSplineSurface->m_bNurbIsBorrowed     = FALSE ; 
-  pBSplineSurface->m_bOutOfBoundsEnabled = FALSE ;
-  pBSplineSurface->m_eKnotType           = eKnotType ;         
-  pBSplineSurface->m_eBSplineSurfaceForm = eBSplineSurfaceForm ;
+  pBSplineSurface->TakeOverNurb(sur, eKnotType, eBSplineSurfaceForm) ;
 
   rpNewSurface = pBSplineSurface ;
 
@@ -6595,4 +6591,23 @@ SmStatus SmBSplineSurface::ReadFromDB
   return SM_SUCCESS;
 
 } // end SmBSplineSurface::ReadFromDB
+
+/*******************************************************************//**
+PURPOSE: Take over an allocated, clamped NURB with its knots as they are,
+    as ReadFromDB builds a surface.
+
+NOTES: For a surface that owns no NURB yet; the surface frees pNurb.
+***********************************************************************/
+void SmBSplineSurface::TakeOverNurb
+ (gw_SURFACE           * pNurb,               // in : allocated with sm_AllocateNurbSurface, owned by this surface afterwards
+  SmKnotType             eKnotType,           // in :
+  SmBSplineSurfaceForm   eBSplineSurfaceForm) // in :
+{
+  SM_ASSERT(m_pNurb == NULL) ;
+  m_pNurb               = pNurb ;
+  m_bNurbIsBorrowed     = FALSE ;
+  m_bOutOfBoundsEnabled = FALSE ;
+  m_eKnotType           = eKnotType ;
+  m_eBSplineSurfaceForm = eBSplineSurfaceForm ;
+} // end SmBSplineSurface::TakeOverNurb
 
